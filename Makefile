@@ -1,56 +1,20 @@
-.PHONY: install lint format check test clean help setup setup-cuda setup-vortex
+.PHONY: install lint format check test test-preprocessing clean help setup setup-cuda setup-vortex setup-evo2
 
 # Default target
 help:
 	@echo "Available commands:"
 	@echo "  install     - Install dependencies"
-	@echo "  setup       - Complete environment setup (CUDA + dependencies + vortex)"
-	@echo "  setup-cuda  - Install CUDA toolkit with conda"
-	@echo "  setup-vortex- Setup vortex repository"
 	@echo "  lint        - Run Ruff linter"
 	@echo "  format      - Format code with Ruff"
 	@echo "  check       - Run linting and formatting checks"
 	@echo "  test        - Run tests"
+	@echo "  test-preprocessing - Test preprocessing module"
 	@echo "  clean       - Clean up cache files"
 	@echo "  setup-dev   - Setup development environment"
 
 # Install dependencies
 install:
 	poetry install
-
-# Complete environment setup
-setup:
-	@echo "🚀 Setting up complete SAE environment..."
-	@chmod +x setup_env.sh
-	./setup_env.sh
-
-# Setup with Python script (alternative)
-setup-python:
-	@echo "🚀 Setting up SAE environment with Python script..."
-	python setup_env.py
-
-# Install CUDA toolkit
-setup-cuda:
-	@echo "📦 Installing CUDA toolkit..."
-	conda install cuda-toolkit=12.4 -c nvidia -y
-	@echo "✅ CUDA toolkit installed"
-
-# Setup vortex repository
-setup-vortex:
-	@echo "🔧 Setting up vortex..."
-	@if [ ! -d "../vortex" ]; then \
-		echo "📥 Cloning vortex repository to parent directory..."; \
-		cd .. && git clone https://github.com/Zymrael/vortex.git; \
-	fi
-	cd ../vortex && git checkout f243e8e
-	@echo "📦 Using torch version: 2.6.0"
-	@if [[ "$OSTYPE" == "darwin"* ]]; then \
-		sed -i '' "s/torch==2.5.1/torch==2.6.0/g" pyproject.toml; \
-	else \
-		sed -i "s/torch==2.5.1/torch==2.6.0/g" pyproject.toml; \
-	fi
-	cd ../vortex && make setup-full
-	@echo "✅ Vortex setup complete in ../vortex"
 
 # Run Ruff linter
 lint:
@@ -68,6 +32,10 @@ check: lint format
 test:
 	poetry run python -m pytest
 
+# Test preprocessing module
+test-preprocessing:
+	poetry run python tests/test_preprocessing.py
+
 # Clean up cache files
 clean:
 	poetry run ruff clean
@@ -83,4 +51,6 @@ setup-dev: install
 # Verify installation
 verify:
 	@echo "🔍 Verifying installation..."
-	poetry run python -c "import torch; import helical; print(f'✅ PyTorch: {torch.__version__}'); print(f'✅ Helical: OK'); print(f'✅ CUDA: {torch.cuda.is_available()}')" 
+	poetry run python -c "import torch; import helical; print(f'✅ PyTorch: {torch.__version__}'); print(f'✅ Helical: OK'); print(f'✅ CUDA: {torch.cuda.is_available()}')"
+	@echo "🔍 Checking evo2..."
+	poetry run python -c "import evo2; print(f'✅ Evo2: OK')" 2>/dev/null || echo "⚠️  Evo2 not available" 

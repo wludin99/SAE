@@ -11,9 +11,6 @@ Trains a sparse autoencoder on various layers of Helical's Helix-mRNA model to u
 git clone git@github.com:wludin99/SAE.git
 cd SAE
 
-# Complete environment setup (includes CUDA toolkit, dependencies, and vortex)
-make setup
-```
 
 ### Manual Setup
 ```bash
@@ -31,18 +28,6 @@ export CPLUS_INCLUDE_PATH=$CONDA_PREFIX/lib/python3.11/site-packages/nvidia/nvtx
 # Install Python dependencies
 poetry install
 
-# Setup vortex (cloned in parent directory)
-make setup-vortex
-```
-
-### Alternative Setup Scripts
-```bash
-# Using bash script
-chmod +x setup_env.sh
-./setup_env.sh
-
-# Using Python script
-python setup_env.py
 ```
 
 ### Project Structure
@@ -136,24 +121,184 @@ poetry shell
 poetry run python your_script.py
 ```
 
-### Training Example
+### Loading Genomic Datasets
+
+The project includes utilities for loading various genomic datasets from Hugging Face. We provide several smaller, manageable datasets perfect for development and testing.
+
+#### Available Datasets
+
 ```python
-from sae import SAE, SAETrainer, TrainingConfig
-from sae.training.callbacks import EarlyStopping, ModelCheckpoint
+from sae.data.genomic_datasets import (
+    list_available_datasets,
+    load_genomic_dataset,
+    load_human_dna,
+    load_drosophila_dna,
+    load_small_proteins,
+    load_dna_promoters
+)
 
-# Create model and train
-model = SAE(input_size=1000, hidden_size=100)
-config = TrainingConfig(epochs=100, learning_rate=0.001)
+# List all available datasets
+datasets = list_available_datasets()
+print(datasets)
 
-# Setup callbacks
-callbacks = [
-    EarlyStopping(patience=10),
-    ModelCheckpoint(filepath='./checkpoints/best_model.pth')
-]
+# Load human DNA dataset (50K samples, ~50MB)
+human_dataloader = load_human_dna(max_samples=1000, batch_size=32)
 
-# Create trainer and train
-trainer = SAETrainer(model, train_loader, val_loader, config, callbacks)
-history = trainer.train(epochs=100)
+# Load drosophila DNA dataset (50K samples, ~50MB)  
+drosophila_dataloader = load_drosophila_dna(max_samples=1000, batch_size=32)
+
+# Load small proteins dataset (10K samples, ~5MB)
+proteins_dataloader = load_small_proteins(max_samples=1000, batch_size=32)
+
+# Load DNA promoters dataset (10K samples, ~10MB)
+promoters_dataloader = load_dna_promoters(max_samples=1000, batch_size=32)
+```
+
+**Available Datasets:**
+- **human_dna**: Human DNA sequences (~50K samples, ~50MB)
+- **drosophila_dna**: Drosophila melanogaster DNA (~50K samples, ~50MB)  
+- **yeast_dna**: Yeast DNA sequences (~50K samples, ~50MB)
+- **small_proteins**: Protein sequences subset (~10K samples, ~5MB)
+- **dna_promoters**: DNA promoter sequences (~10K samples, ~10MB)
+- **genomic_sequences**: Various genomic sequences (~100K samples, ~100MB)
+
+#### Example Script
+Run the example script to see all loading options:
+```bash
+poetry run python examples/load_genomic_datasets.py
+```
+
+### Sequence Preprocessing Module
+
+The project includes a comprehensive preprocessing module for sequence foundation models, with special support for Helical and codon-based preprocessing.
+
+#### Helical Model Wrapper
+
+```python
+from sae.preprocessing import HelicalWrapper, create_helical_wrapper, CodonPreprocessor
+
+# Create Helical wrapper with codon preprocessing
+wrapper = create_helical_wrapper(
+    device="cuda" if torch.cuda.is_available() else "cpu",
+    batch_size=32,
+    codon_start_token="E",  # Each codon starts with 'E'
+    add_codon_start=True,
+    normalize_embeddings=False
+)
+
+# Generate embeddings from sequences
+sequences = ["ATGCGTACGTACGT", "GCTAGCTAGCTAGC"]
+embeddings = wrapper(sequences)
+print(f"Generated embeddings: {embeddings.shape}")
+
+# Get codon statistics
+stats = wrapper.get_codon_statistics(sequences)
+print(f"Total codons: {stats['total_codons']}")
+```
+
+#### Codon Preprocessing
+
+```python
+from sae.preprocessing import CodonPreprocessor
+
+# Create codon preprocessor
+preprocessor = CodonPreprocessor(start_token="E")
+
+# Process sequences
+sequences = ["ATGCGTACGTACGT", "GCTAGCTAGCTAGC"]
+processed = preprocessor.process_sequences(sequences)
+
+# Original: "ATGCGTACGTACGT"
+# Processed: "EATGEACGEACGEACG"
+print(f"Original: {sequences[0]}")
+print(f"Processed: {processed[0]}")
+
+# Get codon statistics
+stats = preprocessor.get_codon_statistics(sequences)
+print(f"Unique codons: {stats['unique_codons']}")
+```
+
+#### Example Script
+```bash
+poetry run python examples/preprocessing_example.py
+```
+
+### Complete SAE Pipeline
+
+The project provides a complete pipeline for training SAE models on HelicalmRNA embeddings:
+
+#### Quick Start
+```python
+from sae import run_complete_pipeline
+
+# Run complete pipeline (embeddings -> SAE training -> feature extraction)
+pipeline = run_complete_pipeline(
+    dataset_name="human_dna",
+    max_samples=1000,
+    embedding_dim=768,
+    hidden_dim=50,
+    epochs=50,
+    batch_size=32
+)
+
+# Extract features from new embeddings
+features = pipeline.extract_features(new_embeddings)
+```
+
+#### Step-by-Step Pipeline
+```python
+from sae import SAETrainingPipeline, EmbeddingGenerator
+
+# 1. Setup pipeline
+pipeline = SAETrainingPipeline(
+    embedding_dim=768,
+    hidden_dim=50,
+    sparsity_weight=0.1
+)
+
+# 2. Setup components
+pipeline.setup_embedding_generator()
+pipeline.setup_sae_model()
+
+# 3. Prepare data
+train_loader, val_loader = pipeline.prepare_data(
+    dataset_name="human_dna",
+    max_samples=1000
+)
+
+# 4. Train SAE
+history = pipeline.train(train_loader, val_loader, epochs=50)
+
+# 5. Analyze results
+pipeline.plot_training_history("training_history.png")
+```
+
+#### Manual Embedding Generation
+```python
+from sae import EmbeddingGenerator
+
+# Generate embeddings from genomic sequences
+generator = EmbeddingGenerator()
+result = generator.generate_embeddings_from_dataset(
+    dataset_name="human_dna",
+    max_samples=1000,
+    layer_idx=None  # Use last layer, or specify layer number
+)
+
+embeddings = result['embeddings']
+print(f"Generated embeddings: {embeddings.shape}")
+```
+
+#### Example Scripts
+```bash
+# Run complete pipeline with analysis
+poetry run python examples/complete_sae_pipeline.py
+
+# Quick test (small dataset)
+poetry run python examples/complete_sae_pipeline.py --quick
+
+# Test genomic datasets
+poetry run python examples/load_genomic_datasets.py
 ```
 
 ## Dependencies
@@ -170,4 +315,3 @@ If using conda for CUDA toolkit, add these to your shell profile:
 ```bash
 export CUDNN_PATH=$CONDA_PREFIX/lib/python3.11/site-packages/nvidia/cudnn
 export CPLUS_INCLUDE_PATH=$CONDA_PREFIX/lib/python3.11/site-packages/nvidia/nvtx/include
-```
