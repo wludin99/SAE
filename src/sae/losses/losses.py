@@ -20,7 +20,7 @@ class CombinedLoss(nn.Module):
             sparsity_weight (float): Weight for the sparsity penalty
             reconstruction_weight (float): Weight for the reconstruction loss
         """
-        super(CombinedLoss, self).__init__()
+        super().__init__()
         self.sparsity_weight = sparsity_weight
         self.reconstruction_weight = reconstruction_weight
 
@@ -64,7 +64,7 @@ class SAELoss(nn.Module):
             sparsity_weight (float): Weight for the sparsity penalty (lambda in the loss)
             sparsity_target (float): Target sparsity level (rho in KL divergence)
         """
-        super(SAELoss, self).__init__()
+        super().__init__()
         self.sparsity_weight = sparsity_weight
         self.sparsity_target = sparsity_target
 
@@ -119,7 +119,7 @@ class L1SparsityLoss(nn.Module):
     """
 
     def __init__(self, weight=0.01):
-        super(L1SparsityLoss, self).__init__()
+        super().__init__()
         self.weight = weight
 
     def forward(self, activations):
@@ -132,7 +132,7 @@ class L2SparsityLoss(nn.Module):
     """
 
     def __init__(self, weight=0.01):
-        super(L2SparsityLoss, self).__init__()
+        super().__init__()
         self.weight = weight
 
     def forward(self, activations):

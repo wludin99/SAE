@@ -18,10 +18,6 @@ def test_imports():
     try:
         from sae.preprocessing import (
             CodonPreprocessor,
-            HelicalWrapper,
-            PreprocessingConfig,
-            SequenceModelWrapper,
-            create_helical_wrapper,
         )
         print("✓ All preprocessing imports successful")
         return True

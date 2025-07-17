@@ -4,10 +4,7 @@ Example script demonstrating how to load smaller genomic datasets
 from Hugging Face for development and testing.
 """
 
-import os
-import sys
 
-sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 from sae.data.genomic_datasets import (
     create_genomic_dataloader,

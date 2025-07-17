@@ -9,7 +9,7 @@ from sae.losses import SAELoss
 class TiedLinear(nn.Module):
     """Linear layer with tied weights for encoder-decoder"""
     def __init__(self, input_size, hidden_size, bias=True):
-        super(TiedLinear, self).__init__()
+        super().__init__()
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.weight = nn.Parameter(torch.Tensor(hidden_size, input_size))
@@ -45,7 +45,7 @@ class SAE(nn.Module):
         Returns:
             SAE model
         """
-        super(SAE, self).__init__()
+        super().__init__()
         self.dictionary = TiedLinear(input_size, hidden_size, bias=True)
         self.activation = nn.ReLU()
 

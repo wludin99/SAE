@@ -5,12 +5,9 @@ This script demonstrates how to use the RefSeq data with the SAE training pipeli
 including gene feature extraction and codon preprocessing for Helical model input.
 """
 
-import os
-import sys
-
-sys.path.append(os.path.join(os.path.dirname(__file__), "..", "src"))
-
 import logging
+import os
+
 
 from sae.pipeline import run_complete_pipeline
 

@@ -5,9 +5,9 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader, TensorDataset
 
-from ..models import SAE
-from ..training import SAETrainer, TrainingConfig
-from ..training.callbacks import EarlyStopping, LearningRateScheduler, ModelCheckpoint
+from sae.models import SAE
+from sae.training import SAETrainer, TrainingConfig
+from sae.training.callbacks import EarlyStopping, LearningRateScheduler, ModelCheckpoint
 
 
 def create_dummy_data(n_samples=1000, input_size=1000, train_split=0.8):
@@ -89,7 +89,6 @@ def main():
 
     # Train the model
     print("Starting training...")
-    history = trainer.train(epochs=config.epochs)
 
     # Print summary
     trainer.logger.print_summary()

@@ -3,10 +3,6 @@
 Example showing how to use the sequence length filter in the RefSeqDataset.
 """
 
-import os
-import sys
-
-sys.path.append(os.path.join(os.path.dirname(__file__), "src"))
 
 from sae.data.refseq_parser import create_refseq_dataloader, load_refseq_dataset
 from sae.pipeline.pipeline import run_complete_pipeline

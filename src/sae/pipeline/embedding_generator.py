@@ -15,12 +15,12 @@ import torch
 
 # Import helical components and our wrapper
 try:
-    from ..preprocessing import (
+    from sae.preprocessing import (
         HelicalWrapper,
         PreprocessingConfig,
         create_helical_wrapper,
     )
-    from ..preprocessing.refseq_preprocessor import RefSeqPreprocessor
+    from sae.preprocessing.refseq_preprocessor import RefSeqPreprocessor
 except ImportError:
     print("Warning: Helical not available. Install with: poetry add helical")
     HelicalWrapper = None

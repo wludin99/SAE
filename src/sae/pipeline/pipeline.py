@@ -13,10 +13,10 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader, TensorDataset
 
-from ..models.sae import SAE
-from ..training.trainer import SAETrainer
-from ..training.utils import TrainingConfig
-from .embedding_generator import EmbeddingGenerator
+from sae.models.sae import SAE
+from sae.pipeline import EmbeddingGenerator
+from sae.training.trainer import SAETrainer
+from sae.training.utils import TrainingConfig
 
 
 class SAETrainingPipeline:
@@ -218,13 +218,12 @@ class SAETrainingPipeline:
 
         self.logger.info("✅ Trainer setup complete")
 
-    def train(self, epochs: int = 100, **kwargs) -> dict[str, list[float]]:
+    def train(self, epochs: int = 100) -> dict[str, list[float]]:
         """
         Train the SAE model using the existing SAETrainer
 
         Args:
             epochs: Number of training epochs
-            **kwargs: Additional arguments for training
 
         Returns:
             Training history
@@ -263,7 +262,7 @@ class SAETrainingPipeline:
         # Load using trainer
         if self.trainer is None:
             # Create a minimal trainer just for loading
-            from ..training.utils import TrainingConfig
+            from sae.training.utils import TrainingConfig
             config = TrainingConfig(
                 input_size=self.embedding_dim,
                 hidden_size=self.hidden_dim,
