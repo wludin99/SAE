@@ -8,6 +8,7 @@ extracting gene features and adding 'E' tokens at codon boundaries for Helical m
 import logging
 from typing import Any, Optional
 
+import numpy as np
 from Bio import SeqIO
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
@@ -348,7 +349,6 @@ class RefSeqPreprocessor:
 
         # Calculate length statistics
         if stats["lengths"]:
-            import numpy as np
             stats["length_stats"]["mean"] = np.mean(stats["lengths"])
             stats["length_stats"]["median"] = np.median(stats["lengths"])
 

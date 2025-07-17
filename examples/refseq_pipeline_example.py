@@ -8,7 +8,6 @@ including gene feature extraction and codon preprocessing for Helical model inpu
 import logging
 import os
 
-
 from sae.pipeline import run_complete_pipeline
 
 # Setup logging

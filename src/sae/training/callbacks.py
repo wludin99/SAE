@@ -118,11 +118,11 @@ class LearningRateScheduler(Callback):
         self.scheduler_kwargs = kwargs
         self.scheduler = None
 
-    def on_epoch_begin(self, epoch: int):
+    def on_epoch_begin(self):
         if self.scheduler is None:
             self._setup_scheduler()
 
-    def on_epoch_end(self, epoch: int, metrics: dict[str, float]):
+    def on_epoch_end(self, metrics: dict[str, float]):
         if self.scheduler is not None:
             if self.scheduler_type == "reduce_on_plateau":
                 # For ReduceLROnPlateau, we need a metric to monitor
@@ -164,10 +164,10 @@ class ProgressLogger(Callback):
         super().__init__()
         self.log_interval = log_interval
 
-    def on_epoch_begin(self, epoch: int):
+    def on_epoch_begin(self):
         pass
 
-    def on_epoch_end(self, epoch: int, metrics: dict[str, float]):
+    def on_epoch_end(self, metrics: dict[str, float]):
         if epoch % self.log_interval == 0:
             print(f"Epoch {epoch}: {metrics}")
 

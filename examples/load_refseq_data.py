@@ -5,6 +5,7 @@ This script demonstrates how to use the RefSeq parser to load and analyze
 the vertebrate mammalian RNA data you downloaded.
 """
 
+import os
 
 from sae.data import (
     analyze_refseq_file,

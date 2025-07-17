@@ -5,6 +5,7 @@ This module provides functionality to parse RefSeq GenBank format files
 using BioPython's SeqIO and integrate them with the SAE pipeline.
 """
 
+import os
 from typing import Any, Optional
 
 import numpy as np
