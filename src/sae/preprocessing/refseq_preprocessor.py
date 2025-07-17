@@ -5,15 +5,14 @@ This module provides preprocessing functionality specifically for RefSeq GenBank
 extracting gene features and adding 'E' tokens at codon boundaries for Helical model input.
 """
 
-import re
-from typing import List, Dict, Any, Optional, Tuple
-import torch
+import logging
+from typing import Any, Optional
+
 from Bio import SeqIO
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
-import logging
+from tqdm import tqdm
 
-from .base import SequenceModelWrapper, PreprocessingConfig
 from .codon_utils import CodonPreprocessor
 
 logger = logging.getLogger(__name__)
@@ -24,423 +23,333 @@ class RefSeqPreprocessor:
     Preprocessor for RefSeq GenBank files that extracts gene features
     and processes sequences for Helical model input.
     """
-    
+
     def __init__(self, codon_start_token: str = "E"):
         """
         Initialize the RefSeq preprocessor.
-        
+
         Args:
             codon_start_token: Token to prepend to each codon (default: 'E')
         """
         self.codon_start_token = codon_start_token
         self.codon_preprocessor = CodonPreprocessor(start_token=codon_start_token)
-    
-    def extract_gene_features(self, record: SeqRecord) -> Dict[str, Any]:
+
+    def extract_gene_features(self, record: SeqRecord) -> dict[str, Any]:
         """
         Extract gene features from a GenBank record.
-        
+
         Args:
             record: BioPython SeqRecord object
-            
+
         Returns:
             Dictionary containing extracted gene features
         """
         features = {
-            'id': record.id,
-            'name': record.name,
-            'description': record.description,
-            'sequence': str(record.seq),
-            'length': len(record.seq),
-            'organism': record.annotations.get('organism', 'unknown'),
-            'molecule_type': record.annotations.get('molecule_type', 'unknown'),
-            'gene_features': [],
-            'cds_features': [],
-            'start_codons': [],
-            'stop_codons': []
+            "id": record.id,
+            "name": record.name,
+            "description": record.description,
+            "sequence": str(record.seq),
+            "length": len(record.seq),
+            "organism": record.annotations.get("organism", "unknown"),
+            "molecule_type": record.annotations.get("molecule_type", "unknown"),
+            "gene_features": [],
+            "cds_features": [],
+            "start_codons": [],
+            "stop_codons": []
         }
-        
+
         # Extract gene and CDS features
         for feature in record.features:
-            if feature.type == 'gene':
+            if feature.type == "gene":
                 gene_info = {
-                    'type': 'gene',
-                    'location': str(feature.location),
-                    'start': feature.location.start.position if feature.location.start else None,
-                    'end': feature.location.end.position if feature.location.end else None,
-                    'strand': feature.location.strand,
-                    'qualifiers': dict(feature.qualifiers)
+                    "type": "gene",
+                    "location": str(feature.location),
+                    "start": feature.location.start.real if feature.location.start else None,
+                    "end": feature.location.end.real if feature.location.end else None,
+                    "strand": feature.location.strand,
+                    "qualifiers": dict(feature.qualifiers)
                 }
-                features['gene_features'].append(gene_info)
-                
-            elif feature.type == 'CDS':
+                features["gene_features"].append(gene_info)
+
+            elif feature.type == "CDS":
                 cds_info = {
-                    'type': 'CDS',
-                    'location': str(feature.location),
-                    'start': feature.location.start.position if feature.location.start else None,
-                    'end': feature.location.end.position if feature.location.end else None,
-                    'strand': feature.location.strand,
-                    'qualifiers': dict(feature.qualifiers),
-                    'codon_start': feature.qualifiers.get('codon_start', [1])[0]
+                    "type": "CDS",
+                    "location": str(feature.location),
+                    "start": feature.location.start.real if feature.location.start else None,
+                    "end": feature.location.end.real if feature.location.end else None,
+                    "strand": feature.location.strand,
+                    "qualifiers": dict(feature.qualifiers),
+                    "codon_start": feature.qualifiers.get("codon_start", [1])[0]
                 }
-                features['cds_features'].append(cds_info)
-                
-            elif feature.type == 'misc_feature':
+                features["cds_features"].append(cds_info)
+
+            elif feature.type == "misc_feature":
                 # Look for start/stop codons
-                note = feature.qualifiers.get('note', [''])[0].lower()
-                if 'start codon' in note or 'atg' in note:
-                    features['start_codons'].append({
-                        'location': str(feature.location),
-                        'start': feature.location.start.position if feature.location.start else None,
-                        'end': feature.location.end.position if feature.location.end else None
+                note = feature.qualifiers.get("note", [""])[0].lower()
+                if "start codon" in note or "atg" in note:
+                    features["start_codons"].append({
+                        "location": str(feature.location),
+                        "start": feature.location.start.real if feature.location.start else None,
+                        "end": feature.location.end.real if feature.location.end else None
                     })
-                elif 'stop codon' in note or 'stop' in note:
-                    features['stop_codons'].append({
-                        'location': str(feature.location),
-                        'start': feature.location.start.position if feature.location.start else None,
-                        'end': feature.location.end.position if feature.location.end else None
+                elif "stop codon" in note or "stop" in note:
+                    features["stop_codons"].append({
+                        "location": str(feature.location),
+                        "start": feature.location.start.real if feature.location.start else None,
+                        "end": feature.location.end.real if feature.location.end else None
                     })
-        
+
         return features
-    
-    def get_coding_sequence(self, features: Dict[str, Any]) -> Optional[str]:
+
+    def get_coding_sequence(self, features: dict[str, Any]) -> Optional[str]:
         """
         Extract the coding sequence based on CDS features.
-        
+
         Args:
             features: Gene features dictionary
-            
+
         Returns:
             Coding sequence string or None if no CDS found
         """
-        if not features['cds_features']:
+        if not features["cds_features"]:
             return None
-        
+
         # Use the first CDS feature
-        cds = features['cds_features'][0]
-        start = cds['start']
-        end = cds['end']
-        
+        cds = features["cds_features"][0]
+        start = cds["start"]
+        end = cds["end"]
+
         if start is None or end is None:
             return None
-        
+
         # Extract the coding sequence
-        sequence = features['sequence']
+        sequence = features["sequence"]
         coding_seq = sequence[start:end]
-        
+
         # Handle reverse strand
-        if cds['strand'] == -1:
+        if cds["strand"] == -1:
             coding_seq = str(Seq(coding_seq).reverse_complement())
-        
+
         return coding_seq
-    
-    def add_codon_start_tokens(self, sequence: str, codon_start: int = 1) -> str:
+
+
+
+    def add_codon_start_tokens_to_coding_region(self, full_sequence: str, cds_start: int, cds_end: int,
+                                               codon_start: int = 1) -> str:
         """
-        Add 'E' tokens at the beginning of each codon.
-        
+        Add 'E' tokens before every codon in the coding region only, keeping the full sequence.
+
         Args:
-            sequence: DNA/RNA sequence
-            codon_start: Position where coding starts (1-based)
-            
+            full_sequence: Complete DNA/RNA sequence
+            cds_start: Start position of CDS (0-based)
+            cds_end: End position of CDS (0-based)
+            codon_start: Position where coding starts within CDS (1-based)
+
         Returns:
-            Sequence with 'E' tokens added at codon boundaries
+            Full sequence with 'E' tokens added only in the coding region
         """
-        if not sequence:
-            return sequence
-        
-        # Adjust for codon_start (1-based to 0-based)
+        if not full_sequence or cds_start is None or cds_end is None:
+            return full_sequence
+
+        # Convert T's to U's in the full sequence
+        full_sequence = full_sequence.replace("T", "U").replace("t", "u")
+
+        # Extract the coding region
+        coding_region = full_sequence[cds_start:cds_end]
+
+        # Adjust for codon_start within the coding region
         start_offset = codon_start - 1
         if start_offset > 0:
-            sequence = sequence[start_offset:]
-        
-        # Process with codon preprocessor
-        processed_sequences = self.codon_preprocessor.process_sequences([sequence])
-        return processed_sequences[0] if processed_sequences else sequence
-    
-    def process_refseq_record(self, record: SeqRecord, use_cds: bool = True) -> Dict[str, Any]:
+            coding_region = coding_region[start_offset:]
+
+        # Add 'E' tokens before each codon in the coding region
+        processed_coding_region = self.codon_preprocessor.add_codon_start_tokens(coding_region)
+
+        # Reconstruct the full sequence with processed coding region
+        result = (
+            full_sequence[:cds_start] +  # Before CDS
+            processed_coding_region +     # Processed coding region
+            full_sequence[cds_end:]       # After CDS
+        )
+
+        return result
+
+    def process_refseq_record(self, record: SeqRecord, use_cds: bool = True) -> dict[str, Any]:
         """
         Process a single RefSeq record, extracting features and preparing sequence.
-        
+
         Args:
             record: BioPython SeqRecord object
             use_cds: Whether to use CDS features for sequence extraction
-            
+
         Returns:
             Dictionary with processed sequence and metadata
         """
         # Extract features
         features = self.extract_gene_features(record)
-        
+
+        # Convert T's to U's in the original sequence
+        original_sequence = features["sequence"]
+        features["sequence"] = original_sequence.replace("T", "U").replace("t", "u")
+
         # Determine which sequence to use
-        if use_cds and features['cds_features']:
-            # Use coding sequence
-            sequence = self.get_coding_sequence(features)
-            if sequence:
-                features['processed_sequence'] = sequence
-                features['sequence_type'] = 'CDS'
-                
-                # Get codon start from CDS feature
-                cds = features['cds_features'][0]
-                codon_start = int(cds.get('codon_start', 1))
-                
-                # Add codon start tokens
-                features['final_sequence'] = self.add_codon_start_tokens(sequence, codon_start)
+        if use_cds and features["cds_features"]:
+            # Use CDS features to process coding region
+            cds = features["cds_features"][0]
+            cds_start = cds["start"]
+            cds_end = cds["end"]
+            codon_start = int(cds.get("codon_start", 1))
+
+            if cds_start is not None and cds_end is not None:
+                # Process coding region while keeping full sequence
+                features["sequence_type"] = "CDS_annotated"
+                features["final_sequence"] = self.add_codon_start_tokens_to_coding_region(
+                    features["sequence"], cds_start, cds_end, codon_start
+                )
             else:
-                # Fallback to full sequence
-                features['processed_sequence'] = features['sequence']
-                features['sequence_type'] = 'full'
-                features['final_sequence'] = self.add_codon_start_tokens(features['sequence'])
+                # Fallback to full sequence with codon tokens
+                features["sequence_type"] = "full"
+                features["final_sequence"] = self.codon_preprocessor.add_codon_start_tokens(features["sequence"])
         else:
-            # Use full sequence
-            features['processed_sequence'] = features['sequence']
-            features['sequence_type'] = 'full'
-            features['final_sequence'] = self.add_codon_start_tokens(features['sequence'])
-        
+            # Use full sequence with codon tokens
+            features["sequence_type"] = "full"
+            features["final_sequence"] = self.codon_preprocessor.add_codon_start_tokens(features["sequence"])
+
         return features
-    
+
     def validate_sequence_for_helical(self, sequence: str) -> bool:
         """
         Validate if a sequence is suitable for Helical model input.
-        
+
         Args:
             sequence: Processed sequence
-            
+
         Returns:
             True if sequence is valid
         """
         if not sequence:
             return False
-        
-        # Check if sequence has proper codon structure (length divisible by 3)
-        # Account for 'E' tokens at the beginning of each codon
-        if len(sequence) % 4 != 0:  # Each codon is 4 characters: E + 3 bases
-            return False
-        
-        # Check for valid characters
-        valid_chars = set('EACGTUN')
+
+        # Check for valid characters (now including U instead of T)
+        valid_chars = set("EACGUN")
         if not all(c in valid_chars for c in sequence.upper()):
             return False
-        
+
+        # For sequences with CDS annotation, we don't require strict codon structure
+        # since only the coding region has 'E' tokens
         return True
-    
-    def get_processing_statistics(self, processed_records: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """
-        Get statistics about processed records.
-        
-        Args:
-            processed_records: List of processed record dictionaries
-            
-        Returns:
-            Dictionary with processing statistics
-        """
-        stats = {
-            'total_records': len(processed_records),
-            'valid_sequences': 0,
-            'cds_sequences': 0,
-            'full_sequences': 0,
-            'length_stats': {
-                'min': float('inf'),
-                'max': 0,
-                'mean': 0,
-                'median': 0
-            },
-            'lengths': [],
-            'organisms': {},
-            'molecule_types': {}
-        }
-        
-        for record in processed_records:
-            if self.validate_sequence_for_helical(record['final_sequence']):
-                stats['valid_sequences'] += 1
-                
-                length = len(record['final_sequence'])
-                stats['lengths'].append(length)
-                stats['length_stats']['min'] = min(stats['length_stats']['min'], length)
-                stats['length_stats']['max'] = max(stats['length_stats']['max'], length)
-                
-                if record['sequence_type'] == 'CDS':
-                    stats['cds_sequences'] += 1
-                else:
-                    stats['full_sequences'] += 1
-                
-                # Count organisms
-                organism = record['organism']
-                stats['organisms'][organism] = stats['organisms'].get(organism, 0) + 1
-                
-                # Count molecule types
-                mol_type = record['molecule_type']
-                stats['molecule_types'][mol_type] = stats['molecule_types'].get(mol_type, 0) + 1
-        
-        # Calculate length statistics
-        if stats['lengths']:
-            import numpy as np
-            stats['length_stats']['mean'] = np.mean(stats['lengths'])
-            stats['length_stats']['median'] = np.median(stats['lengths'])
-        
-        return stats
 
-
-class RefSeqWrapper(SequenceModelWrapper):
-    """
-    Wrapper for RefSeq data processing with Helical model integration.
-    """
-    
-    def __init__(self, config: PreprocessingConfig):
-        super().__init__(config)
-        self.refseq_preprocessor = RefSeqPreprocessor(
-            codon_start_token=config.codon_start_token
-        )
-        self._helical_config = None
-    
-    def _load_model(self):
-        """Load the Helical mRNA model."""
-        try:
-            from helical.models.helix_mrna import HelixmRNA, HelixmRNAConfig
-            
-            # Create Helical configuration
-            self._helical_config = HelixmRNAConfig(
-                batch_size=self.config.batch_size,
-                device=self.config.device,
-                max_length=self.config.max_length
-            )
-            
-            # Initialize the model
-            model = HelixmRNA(configurer=self._helical_config)
-            logger.info(f"Helical model loaded successfully on {self.config.device}")
-            return model
-            
-        except Exception as e:
-            logger.error(f"Failed to load Helical model: {e}")
-            raise
-    
-    def process_refseq_file(self, file_path: str, max_samples: Optional[int] = None, 
-                           filter_by_type: Optional[str] = None, use_cds: bool = True) -> List[Dict[str, Any]]:
+    def process_refseq_file(self, file_path: str, max_samples: Optional[int] = None,
+                           filter_by_type: Optional[str] = None, use_cds: bool = True) -> list[dict[str, Any]]:
         """
         Process a RefSeq GenBank file and prepare sequences for Helical model.
-        
+
         Args:
             file_path: Path to the GenBank file
             max_samples: Maximum number of samples to process
             filter_by_type: Filter by molecule type
             use_cds: Whether to use CDS features for sequence extraction
-            
+
         Returns:
             List of processed record dictionaries
         """
         processed_records = []
-        
+
         logger.info(f"Processing RefSeq file: {file_path}")
-        
-        with open(file_path, 'r') as handle:
-            for i, record in enumerate(SeqIO.parse(handle, "genbank")):
+
+        # First, count total records for progress bar
+        total_records = 0
+        with open(file_path) as handle:
+            for _ in SeqIO.parse(handle, "genbank"):
+                total_records += 1
+                if max_samples and total_records >= max_samples * 2:  # Rough estimate
+                    break
+
+        logger.info(f"Found approximately {total_records} records to process")
+
+        with open(file_path) as handle:
+            # Use tqdm for progress tracking
+            for i, record in enumerate(tqdm(SeqIO.parse(handle, "genbank"),
+                                          total=total_records,
+                                          desc="Processing records",
+                                          unit="record")):
                 # Apply filters
-                if filter_by_type and record.annotations.get('molecule_type') != filter_by_type:
+                if filter_by_type and record.annotations.get("molecule_type") != filter_by_type:
                     continue
-                
+
                 # Process record
                 try:
-                    processed_record = self.refseq_preprocessor.process_refseq_record(record, use_cds=use_cds)
-                    
+                    processed_record = self.process_refseq_record(record, use_cds=use_cds)
+
                     # Validate for Helical
-                    if self.refseq_preprocessor.validate_sequence_for_helical(processed_record['final_sequence']):
+                    if self.validate_sequence_for_helical(processed_record["final_sequence"]):
                         processed_records.append(processed_record)
-                    
-                    # Progress indicator
-                    if len(processed_records) % 1000 == 0:
-                        logger.info(f"Processed {len(processed_records)} valid records...")
-                    
+
                     # Check max_samples
                     if max_samples and len(processed_records) >= max_samples:
                         break
-                        
+
                 except Exception as e:
                     logger.warning(f"Error processing record {i}: {e}")
                     continue
-        
+
         logger.info(f"✅ Processed {len(processed_records)} valid records from {file_path}")
         return processed_records
-    
-    def _preprocess_sequences(self, sequences: List[str]) -> Any:
-        """
-        Preprocess sequences for Helical model.
-        
-        Args:
-            sequences: List of processed sequences with 'E' tokens
-            
-        Returns:
-            Preprocessed data ready for Helical model
-        """
-        # Validate sequences
-        valid_sequences = []
-        for i, seq in enumerate(sequences):
-            if self.refseq_preprocessor.validate_sequence_for_helical(seq):
-                valid_sequences.append(seq)
-            else:
-                logger.warning(f"Sequence {i} is not valid for Helical model")
-        
-        if not valid_sequences:
-            raise ValueError("No valid sequences found for processing")
-        
-        # Use Helical's built-in preprocessing
-        try:
-            processed_data = self.model.process_data(valid_sequences)
-            return processed_data
-        except Exception as e:
-            logger.error(f"Helical preprocessing failed: {e}")
-            raise
-    
-    def _get_embeddings(self, processed_data: Any) -> torch.Tensor:
-        """
-        Extract embeddings from processed data using Helical model.
-        
-        Args:
-            processed_data: Data processed by Helical's process_data method
-            
-        Returns:
-            Tensor of embeddings
-        """
-        try:
-            embeddings = self.model.get_embeddings(processed_data)
-            
-            # Ensure embeddings are on the correct device
-            if isinstance(embeddings, torch.Tensor):
-                embeddings = embeddings.to(self.config.device)
-            
-            logger.info(f"Generated embeddings with shape: {embeddings.shape}")
-            return embeddings
-            
-        except Exception as e:
-            logger.error(f"Failed to generate embeddings: {e}")
-            raise
 
+    def get_processing_statistics(self, processed_records: list[dict[str, Any]]) -> dict[str, Any]:
+        """
+        Get statistics about processed records.
 
-def create_refseq_wrapper(
-    device: str = "cuda",
-    batch_size: int = 32,
-    max_length: Optional[int] = None,
-    codon_start_token: str = "E",
-    normalize_embeddings: bool = False
-) -> RefSeqWrapper:
-    """
-    Convenience function to create a RefSeq wrapper with default settings.
-    
-    Args:
-        device: Device to run the model on
-        batch_size: Batch size for processing
-        max_length: Maximum sequence length
-        codon_start_token: Token to prepend to each codon
-        normalize_embeddings: Whether to normalize embeddings
-        
-    Returns:
-        Configured RefSeqWrapper instance
-    """
-    config = PreprocessingConfig(
-        model_name="helical",
-        device=device,
-        batch_size=batch_size,
-        max_length=max_length,
-        codon_start_token=codon_start_token,
-        add_codon_start=True,  # Always True for RefSeq processing
-        normalize_embeddings=normalize_embeddings
-    )
-    
-    return RefSeqWrapper(config) 
+        Args:
+            processed_records: List of processed record dictionaries
+
+        Returns:
+            Dictionary with processing statistics
+        """
+        stats = {
+            "total_records": len(processed_records),
+            "valid_sequences": 0,
+            "cds_sequences": 0,
+            "full_sequences": 0,
+            "length_stats": {
+                "min": float("inf"),
+                "max": 0,
+                "mean": 0,
+                "median": 0
+            },
+            "lengths": [],
+            "organisms": {},
+            "molecule_types": {}
+        }
+
+        for record in processed_records:
+            if self.validate_sequence_for_helical(record["final_sequence"]):
+                stats["valid_sequences"] += 1
+
+                length = len(record["final_sequence"])
+                stats["lengths"].append(length)
+                stats["length_stats"]["min"] = min(stats["length_stats"]["min"], length)
+                stats["length_stats"]["max"] = max(stats["length_stats"]["max"], length)
+
+                if record["sequence_type"] == "CDS_annotated":
+                    stats["cds_sequences"] += 1
+                elif record["sequence_type"] == "CDS":
+                    stats["cds_sequences"] += 1
+                else:
+                    stats["full_sequences"] += 1
+
+                # Count organisms
+                organism = record["organism"]
+                stats["organisms"][organism] = stats["organisms"].get(organism, 0) + 1
+
+                # Count molecule types
+                mol_type = record["molecule_type"]
+                stats["molecule_types"][mol_type] = stats["molecule_types"].get(mol_type, 0) + 1
+
+        # Calculate length statistics
+        if stats["lengths"]:
+            import numpy as np
+            stats["length_stats"]["mean"] = np.mean(stats["lengths"])
+            stats["length_stats"]["median"] = np.median(stats["lengths"])
+
+        return stats
