@@ -1,258 +1,93 @@
-# SAE
-Sparse Autoencoders for Interpretability of mRNA Models
+# SAE: Sparse Autoencoders for mRNA Model Interpretability
 
-Trains a sparse autoencoder on various layers of Helical's Helix-mRNA model to uncover biologically relevant factors
+Trains sparse autoencoders on HelicalmRNA model embeddings to uncover biologically relevant factors in mRNA sequences.
 
 ## Installation
 
-### Quick Setup (Recommended)
+This project uses Poetry for dependency management within a Conda environment.
+
+### Prerequisites
+
+1. **Conda Environment**: Create and activate a conda environment
 ```bash
-# Clone repo
-git clone git@github.com:wludin99/SAE.git
-cd SAE
+conda create -n helical python=3.11
+conda activate helical
+```
 
-
-### Manual Setup
+2. **CUDA Toolkit** (optional, for GPU support):
 ```bash
-# Clone repo
-git clone git@github.com:wludin99/SAE.git
-cd SAE
-
-# Install CUDA toolkit (if using conda)
 conda install cuda-toolkit=12.4 -c nvidia
+```
 
-# Set environment variables
-export CUDNN_PATH=$CONDA_PREFIX/lib/python3.11/site-packages/nvidia/cudnn
-export CPLUS_INCLUDE_PATH=$CONDA_PREFIX/lib/python3.11/site-packages/nvidia/nvtx/include
+### Project Setup
 
-# Install Python dependencies
+```bash
+# Clone the repository
+git clone <repository-url>
+cd SAE
+
+# Install dependencies with Poetry
 poetry install
 
+# Activate the Poetry shell
+poetry shell
 ```
 
-### Project Structure
-After setup, your directory structure will look like:
-```
-sae-project/
-├── SAE/                    # Your main SAE project
-│   ├── src/
-│   ├── pyproject.toml
-│   └── ...
-├── vortex/                 # Cloned in parent directory
-│   ├── ...
-│   └── ...
-└── ...
-```
+### Development Setup
 
-## Development Setup
-
-### Install Development Dependencies
 ```bash
-# Install all dependencies including dev tools
+# Install development dependencies
 poetry install
 
 # Setup pre-commit hooks
 make setup-dev
 ```
 
-### Code Quality Tools
+## Data
 
-This project uses **Ruff** for linting and formatting, along with pre-commit hooks for automatic code quality checks.
+This project is designed to work with **RefSeq GenBank files** (.gbff format). The pipeline extracts mRNA sequences and generates embeddings using the HelicalmRNA model.
 
-#### Available Commands
+### Data Requirements
+
+- **Format**: RefSeq GenBank files (.gbff)
+- **Location**: Place your RefSeq files in a `data/` directory (relative to the project root)
+- **Example**: `../data/vertebrate_mammalian.1.rna.gbff`
+
+### Downloading RefSeq Data
+
+RefSeq files can be downloaded from NCBI:
 ```bash
-# Lint code
-make lint
-
-# Format code
-make format
-
-# Run all checks (lint + format)
-make check
-
-# Clean cache files
-make clean
-
-# Verify installation
-make verify
-
-# Show all available commands
-make help
-```
-
-#### Manual Ruff Commands
-```bash
-# Check for issues
-poetry run ruff check .
-
-# Fix auto-fixable issues
-poetry run ruff check --fix .
-
-# Format code
-poetry run ruff format .
-
-# Show what rules are being violated
-poetry run ruff check --statistics .
-```
-
-### Pre-commit Hooks
-
-The project includes pre-commit hooks that automatically:
-- Run Ruff linter and formatter
-- Check for trailing whitespace
-- Ensure files end with newline
-- Validate YAML files
-- Check for large files
-- Detect merge conflicts
-
-These run automatically on every commit, but you can also run them manually:
-```bash
-poetry run pre-commit run --all-files
+# Example: Download vertebrate mammalian RNA
+wget https://ftp.ncbi.nlm.nih.gov/refseq/release/vertebrate_mammalian/vertebrate_mammalian.1.rna.gbff.gz
+gunzip vertebrate_mammalian.1.rna.gbff.gz
 ```
 
 ## Usage
 
-### Activate Environment
-```bash
-# Activate Poetry shell
-poetry shell
-
-# Or run commands directly
-poetry run python your_script.py
-```
-
-### Loading Genomic Datasets
-
-The project includes utilities for loading various genomic datasets from Hugging Face. We provide several smaller, manageable datasets perfect for development and testing.
-
-#### Available Datasets
+### Quick Start
 
 ```python
-from sae.data.genomic_datasets import (
-    list_available_datasets,
-    load_genomic_dataset,
-    load_human_dna,
-    load_drosophila_dna,
-    load_small_proteins,
-    load_dna_promoters
-)
+from sae.pipeline import run_complete_pipeline
 
-# List all available datasets
-datasets = list_available_datasets()
-print(datasets)
-
-# Load human DNA dataset (50K samples, ~50MB)
-human_dataloader = load_human_dna(max_samples=1000, batch_size=32)
-
-# Load drosophila DNA dataset (50K samples, ~50MB)  
-drosophila_dataloader = load_drosophila_dna(max_samples=1000, batch_size=32)
-
-# Load small proteins dataset (10K samples, ~5MB)
-proteins_dataloader = load_small_proteins(max_samples=1000, batch_size=32)
-
-# Load DNA promoters dataset (10K samples, ~10MB)
-promoters_dataloader = load_dna_promoters(max_samples=1000, batch_size=32)
-```
-
-**Available Datasets:**
-- **human_dna**: Human DNA sequences (~50K samples, ~50MB)
-- **drosophila_dna**: Drosophila melanogaster DNA (~50K samples, ~50MB)  
-- **yeast_dna**: Yeast DNA sequences (~50K samples, ~50MB)
-- **small_proteins**: Protein sequences subset (~10K samples, ~5MB)
-- **dna_promoters**: DNA promoter sequences (~10K samples, ~10MB)
-- **genomic_sequences**: Various genomic sequences (~100K samples, ~100MB)
-
-#### Example Script
-Run the example script to see all loading options:
-```bash
-poetry run python examples/load_genomic_datasets.py
-```
-
-### Sequence Preprocessing Module
-
-The project includes a comprehensive preprocessing module for sequence foundation models, with special support for Helical and codon-based preprocessing.
-
-#### Helical Model Wrapper
-
-```python
-from sae.preprocessing import HelicalWrapper, create_helical_wrapper, CodonPreprocessor
-
-# Create Helical wrapper with codon preprocessing
-wrapper = create_helical_wrapper(
-    device="cuda" if torch.cuda.is_available() else "cpu",
-    batch_size=32,
-    codon_start_token="E",  # Each codon starts with 'E'
-    add_codon_start=True,
-    normalize_embeddings=False
-)
-
-# Generate embeddings from sequences
-sequences = ["ATGCGTACGTACGT", "GCTAGCTAGCTAGC"]
-embeddings = wrapper(sequences)
-print(f"Generated embeddings: {embeddings.shape}")
-
-# Get codon statistics
-stats = wrapper.get_codon_statistics(sequences)
-print(f"Total codons: {stats['total_codons']}")
-```
-
-#### Codon Preprocessing
-
-```python
-from sae.preprocessing import CodonPreprocessor
-
-# Create codon preprocessor
-preprocessor = CodonPreprocessor(start_token="E")
-
-# Process sequences
-sequences = ["ATGCGTACGTACGT", "GCTAGCTAGCTAGC"]
-processed = preprocessor.process_sequences(sequences)
-
-# Original: "ATGCGTACGTACGT"
-# Processed: "EATGEACGEACGEACG"
-print(f"Original: {sequences[0]}")
-print(f"Processed: {processed[0]}")
-
-# Get codon statistics
-stats = preprocessor.get_codon_statistics(sequences)
-print(f"Unique codons: {stats['unique_codons']}")
-```
-
-#### Example Script
-```bash
-poetry run python examples/preprocessing_example.py
-```
-
-### Complete SAE Pipeline
-
-The project provides a complete pipeline for training SAE models on HelicalmRNA embeddings:
-
-#### Quick Start
-```python
-from sae import run_complete_pipeline
-
-# Run complete pipeline (embeddings -> SAE training -> feature extraction)
+# Run complete pipeline with RefSeq data
 pipeline = run_complete_pipeline(
-    dataset_name="human_dna",
+    refseq_file="../data/vertebrate_mammalian.1.rna.gbff",
     max_samples=1000,
-    embedding_dim=768,
-    hidden_dim=50,
+    hidden_dim=1000,
     epochs=50,
-    batch_size=32
+    apply_sequence_pooling=False  # Use token-level embeddings
 )
-
-# Extract features from new embeddings
-features = pipeline.extract_features(new_embeddings)
 ```
 
-#### Step-by-Step Pipeline
-```python
-from sae import SAETrainingPipeline, EmbeddingGenerator
+### Step-by-Step Pipeline
 
-# 1. Setup pipeline
+```python
+from sae.pipeline import SAETrainingPipeline
+
+# 1. Initialize pipeline
 pipeline = SAETrainingPipeline(
-    embedding_dim=768,
-    hidden_dim=50,
+    embedding_dim=None,  # Will be auto-detected
+    hidden_dim=1000,
     sparsity_weight=0.1
 )
 
@@ -262,43 +97,100 @@ pipeline.setup_sae_model()
 
 # 3. Prepare data
 train_loader, val_loader = pipeline.prepare_data(
-    dataset_name="human_dna",
-    max_samples=1000
+    refseq_file="../data/vertebrate_mammalian.1.rna.gbff",
+    max_samples=1000,
+    apply_sequence_pooling=False  # Token-level embeddings
 )
 
 # 4. Train SAE
-history = pipeline.train(train_loader, val_loader, epochs=50)
+history = pipeline.train(epochs=50)
 
-# 5. Analyze results
-pipeline.plot_training_history("training_history.png")
+# 5. Extract features
+features = pipeline.extract_features(embeddings)
 ```
 
-#### Manual Embedding Generation
+### Token-Level vs Sequence-Level Embeddings
+
+The pipeline supports two modes:
+
+**Token-Level Embeddings** (default):
 ```python
-from sae import EmbeddingGenerator
-
-# Generate embeddings from genomic sequences
-generator = EmbeddingGenerator()
-result = generator.generate_embeddings_from_dataset(
-    dataset_name="human_dna",
-    max_samples=1000,
-    layer_idx=None  # Use last layer, or specify layer number
+# Preserves individual token information
+pipeline.prepare_data(
+    refseq_file="your_file.gbff",
+    apply_sequence_pooling=False  # 3D: (batch, seq_len, embed_dim)
 )
-
-embeddings = result['embeddings']
-print(f"Generated embeddings: {embeddings.shape}")
 ```
 
-#### Example Scripts
+**Sequence-Level Embeddings**:
+```python
+# Pools tokens to sequence-level representations
+pipeline.prepare_data(
+    refseq_file="your_file.gbff",
+    apply_sequence_pooling=True  # 2D: (batch, embed_dim)
+)
+```
+
+### Example Scripts
+
 ```bash
-# Run complete pipeline with analysis
-poetry run python examples/complete_sae_pipeline.py
+# RefSeq pipeline example
+poetry run python examples/refseq_pipeline_example.py
 
-# Quick test (small dataset)
-poetry run python examples/complete_sae_pipeline.py --quick
+# Sequence length filtering
+poetry run python examples/sequence_length_filter_example.py
 
-# Test genomic datasets
-poetry run python examples/load_genomic_datasets.py
+# Clean architecture example
+poetry run python examples/clean_architecture_example.py
+```
+
+## Development
+
+### Available Commands
+
+```bash
+# Code quality
+make lint          # Run Ruff linter
+make format        # Format code with Ruff
+make check         # Run linting and formatting
+make clean         # Clean cache files
+
+# Testing
+make test          # Run tests
+make test-preprocessing  # Test preprocessing module
+
+# Setup
+make install       # Install dependencies
+make setup-dev     # Setup development environment
+make verify        # Verify installation
+make help          # Show all commands
+```
+
+### Code Quality
+
+This project uses **Ruff** for linting and formatting. Pre-commit hooks automatically run quality checks on commit.
+
+```bash
+# Manual quality checks
+poetry run ruff check .
+poetry run ruff format .
+```
+
+## Project Structure
+
+```
+SAE/
+├── src/sae/                    # Main package
+│   ├── data/                   # Data loading and parsing
+│   ├── models/                 # SAE model implementation
+│   ├── pipeline/               # Training pipeline
+│   ├── preprocessing/          # Sequence preprocessing
+│   └── training/               # Training utilities
+├── examples/                   # Usage examples
+├── tests/                      # Test files
+├── outputs/                    # Generated outputs
+├── pyproject.toml             # Poetry configuration
+└── Makefile                   # Development commands
 ```
 
 ## Dependencies
@@ -306,8 +198,8 @@ poetry run python examples/load_genomic_datasets.py
 - **Python**: 3.11+
 - **PyTorch**: 2.6.0
 - **Helical**: Latest from GitHub
+- **Biopython**: For RefSeq parsing
 - **CUDA Toolkit**: 12.4 (optional, for GPU support)
-- **Vortex**: Cloned from GitHub (located in parent directory)
 
 ## Environment Variables
 
@@ -315,3 +207,4 @@ If using conda for CUDA toolkit, add these to your shell profile:
 ```bash
 export CUDNN_PATH=$CONDA_PREFIX/lib/python3.11/site-packages/nvidia/cudnn
 export CPLUS_INCLUDE_PATH=$CONDA_PREFIX/lib/python3.11/site-packages/nvidia/nvtx/include
+```
