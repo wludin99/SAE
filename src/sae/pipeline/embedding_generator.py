@@ -8,7 +8,7 @@ HelicalmRNA model. It provides utilities for batch processing and caching embedd
 import logging
 import pickle
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, Dict, List
 
 import numpy as np
 import torch
@@ -189,6 +189,185 @@ class EmbeddingGenerator:
         self.logger.info(f"✅ Generated {log_name} embeddings shape: {embeddings.shape}")
         return result
 
+    def generate_layer_embeddings_from_refseq(
+        self,
+        refseq_file: str,
+        layer_name: str,
+        max_samples: Optional[int] = None,
+        filter_by_type: str = "mRNA",
+        use_cds: bool = True,
+        use_cache: bool = True,
+        dataset_name: Optional[str] = None
+    ) -> dict[str, np.ndarray]:
+        """
+        Generate embeddings from a specific layer of the Helical model.
+
+        Args:
+            refseq_file: Path to the RefSeq GenBank file
+            layer_name: Name of the layer to extract from (see HelicalWrapper.LAYER_MAPPING)
+            max_samples: Maximum number of samples to process
+            filter_by_type: Filter by molecule type (e.g., 'mRNA', 'rRNA', 'tRNA')
+            use_cds: Whether to use CDS features for sequence extraction
+            use_cache: Whether to use cached embeddings
+            dataset_name: Optional name for logging purposes
+
+        Returns:
+            Dictionary containing embeddings and metadata
+        """
+        if create_helical_wrapper is None:
+            raise ImportError("Helical wrapper not available. Please install required dependencies.")
+
+        # Check cache first
+        if use_cache:
+            cache_key = f"refseq_{Path(refseq_file).stem}_{filter_by_type}_{max_samples or 'all'}_{layer_name}"
+            cached_result = self._load_from_cache(cache_key)
+            if cached_result is not None:
+                self.logger.info(f"✅ Loaded {layer_name} embeddings from cache: {cached_result['embeddings'].shape}")
+                return cached_result
+
+        # Use dataset_name for logging if provided
+        log_name = dataset_name or f"RefSeq_{Path(refseq_file).stem}"
+
+        # Process RefSeq file using RefSeqPreprocessor
+        self.logger.info(f"Processing {log_name} from file: {refseq_file}")
+        processed_records = self.refseq_preprocessor.process_refseq_file(
+            file_path=refseq_file,
+            max_samples=max_samples,
+            filter_by_type=filter_by_type,
+            use_cds=use_cds
+        )
+
+        if not processed_records:
+            raise ValueError(f"No valid sequences found in {refseq_file}")
+
+        # Extract sequences for embedding generation
+        sequences = [record["final_sequence"] for record in processed_records]
+
+        # Generate embeddings from specific layer using the wrapper
+        self.logger.info(f"Generating {layer_name} embeddings for {len(sequences)} {log_name} sequences...")
+        embeddings = self.wrapper.get_layer_embeddings(sequences, layer_name)
+
+        # Convert to numpy
+        if isinstance(embeddings, torch.Tensor):
+            embeddings = embeddings.cpu().numpy()
+
+        # Prepare result
+        result = {
+            "embeddings": embeddings,
+            "metadata": {
+                "num_sequences": len(sequences),
+                "dataset_name": log_name,
+                "refseq_file": refseq_file,
+                "filter_by_type": filter_by_type,
+                "use_cds": use_cds,
+                "layer_name": layer_name,
+                "processed_records": processed_records
+            }
+        }
+
+        # Cache result
+        if use_cache:
+            cache_key = f"refseq_{Path(refseq_file).stem}_{filter_by_type}_{max_samples or 'all'}_{layer_name}"
+            self._save_to_cache(cache_key, result)
+
+        self.logger.info(f"✅ Generated {layer_name} embeddings shape: {embeddings.shape}")
+        return result
+
+    def generate_all_layer_embeddings_from_refseq(
+        self,
+        refseq_file: str,
+        max_samples: Optional[int] = None,
+        filter_by_type: str = "mRNA",
+        use_cds: bool = True,
+        use_cache: bool = True,
+        dataset_name: Optional[str] = None
+    ) -> dict[str, dict[str, np.ndarray]]:
+        """
+        Generate embeddings from all available layers of the Helical model.
+
+        Args:
+            refseq_file: Path to the RefSeq GenBank file
+            max_samples: Maximum number of samples to process
+            filter_by_type: Filter by molecule type (e.g., 'mRNA', 'rRNA', 'tRNA')
+            use_cds: Whether to use CDS features for sequence extraction
+            use_cache: Whether to use cached embeddings
+            dataset_name: Optional name for logging purposes
+
+        Returns:
+            Dictionary containing embeddings for all layers and metadata
+        """
+        if create_helical_wrapper is None:
+            raise ImportError("Helical wrapper not available. Please install required dependencies.")
+
+        # Check cache first
+        if use_cache:
+            cache_key = f"refseq_{Path(refseq_file).stem}_{filter_by_type}_{max_samples or 'all'}_all_layers"
+            cached_result = self._load_from_cache(cache_key)
+            if cached_result is not None:
+                self.logger.info(f"✅ Loaded all layer embeddings from cache")
+                return cached_result
+
+        # Use dataset_name for logging if provided
+        log_name = dataset_name or f"RefSeq_{Path(refseq_file).stem}"
+
+        # Process RefSeq file using RefSeqPreprocessor
+        self.logger.info(f"Processing {log_name} from file: {refseq_file}")
+        processed_records = self.refseq_preprocessor.process_refseq_file(
+            file_path=refseq_file,
+            max_samples=max_samples,
+            filter_by_type=filter_by_type,
+            use_cds=use_cds
+        )
+
+        if not processed_records:
+            raise ValueError(f"No valid sequences found in {refseq_file}")
+
+        # Extract sequences for embedding generation
+        sequences = [record["final_sequence"] for record in processed_records]
+
+        # Generate embeddings from all layers using the wrapper
+        self.logger.info(f"Generating all layer embeddings for {len(sequences)} {log_name} sequences...")
+        layer_embeddings = self.wrapper.get_all_layer_embeddings(sequences)
+
+        # Convert to numpy
+        numpy_embeddings = {}
+        for layer_name, embeddings in layer_embeddings.items():
+            if isinstance(embeddings, torch.Tensor):
+                numpy_embeddings[layer_name] = embeddings.cpu().numpy()
+
+        # Prepare result
+        result = {
+            "embeddings": numpy_embeddings,
+            "metadata": {
+                "num_sequences": len(sequences),
+                "dataset_name": log_name,
+                "refseq_file": refseq_file,
+                "filter_by_type": filter_by_type,
+                "use_cds": use_cds,
+                "layers": list(numpy_embeddings.keys()),
+                "processed_records": processed_records
+            }
+        }
+
+        # Cache result
+        if use_cache:
+            cache_key = f"refseq_{Path(refseq_file).stem}_{filter_by_type}_{max_samples or 'all'}_all_layers"
+            self._save_to_cache(cache_key, result)
+
+        self.logger.info(f"✅ Generated embeddings for {len(numpy_embeddings)} layers")
+        return result
+
+    def get_available_layers(self) -> List[str]:
+        """
+        Get list of available layers for embedding extraction.
+
+        Returns:
+            List of available layer names
+        """
+        if self.wrapper is None:
+            return []
+        return list(self.wrapper.LAYER_MAPPING.keys())
+
     def _get_cache_key(self, sequences: list[str], layer_idx: Optional[int]) -> str:
         return f"embeddings_{hash(tuple(sequences))}_{layer_idx or 'last'}"
 
@@ -220,16 +399,29 @@ if __name__ == "__main__":
     # Test with a small dataset
     try:
         generator = EmbeddingGenerator()
-        result = generator.generate_embeddings_from_refseq(
-            refseq_file="path/to/your/refseq_file.gb",
-            max_samples=10,
-            dataset_name="test_dataset"
-        )
+        
+        # Get available layers
+        available_layers = generator.get_available_layers()
+        print(f"Available layers: {available_layers}")
+        
+        # Example: Generate embeddings from a specific layer
+        # result = generator.generate_layer_embeddings_from_refseq(
+        #     refseq_file="path/to/your/refseq_file.gb",
+        #     layer_name="after_mlp_1",
+        #     max_samples=10,
+        #     dataset_name="test_dataset"
+        # )
+        
+        # Example: Generate embeddings from all layers
+        # result = generator.generate_all_layer_embeddings_from_refseq(
+        #     refseq_file="path/to/your/refseq_file.gb",
+        #     max_samples=10,
+        #     dataset_name="test_dataset"
+        # )
 
-        print(f"✅ Generated embeddings: {result['embeddings'].shape}")
-        print(f"Dataset: {result['metadata']['dataset_name']}")
-        print(f"Samples: {result['metadata']['num_sequences']}")
+        print("✅ Embedding generator initialized successfully")
 
     except Exception as e:
         print(f"❌ Error: {e}")
         print("Make sure Helical is installed: poetry add helical")
+ 
