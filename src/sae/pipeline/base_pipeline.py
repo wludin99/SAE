@@ -1,27 +1,27 @@
 """
-SAE Training Pipeline
+Base SAE Training Pipeline
 
-This module provides a complete pipeline for training Sparse Autoencoders on
-embeddings generated from HelicalmRNA model.
+This module provides a base pipeline class that contains shared functionality
+for training different types of Sparse Autoencoders on embeddings generated
+from HelicalmRNA model.
 """
 
 import logging
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Dict, Any
 
 import numpy as np
 import torch
 from torch.utils.data import DataLoader, TensorDataset
 
-from sae.models.sae import SAE
 from sae.pipeline import EmbeddingGenerator
 from sae.training.trainer import SAETrainer
 from sae.training.utils import TrainingConfig
 
 
-class SAETrainingPipeline:
+class BaseSAETrainingPipeline:
     """
-    Complete pipeline for training SAE on HelicalmRNA embeddings
+    Base pipeline class containing shared functionality for SAE training
     """
 
     def __init__(
@@ -32,10 +32,12 @@ class SAETrainingPipeline:
         learning_rate: float = 1e-3,
         device: Optional[str] = None,
         cache_dir: str = "./outputs/embeddings_cache",
-        model_save_dir: str = "./outputs/sae_models"
+        model_save_dir: str = "./outputs/sae_models",
+        layer_idx: Optional[int] = None,
+        layer_name: Optional[str] = None
     ):
         """
-        Initialize the training pipeline
+        Initialize the base training pipeline
 
         Args:
             embedding_dim: Dimension of input embeddings
@@ -45,11 +47,15 @@ class SAETrainingPipeline:
             device: Device to run training on
             cache_dir: Directory to cache embeddings
             model_save_dir: Directory to save trained models
+            layer_idx: Layer index to extract embeddings from (None for final layer)
+            layer_name: Layer name for identification (e.g., "final", "layer_0", etc.)
         """
         self.embedding_dim = embedding_dim
         self.hidden_dim = hidden_dim
         self.sparsity_weight = sparsity_weight
         self.learning_rate = learning_rate
+        self.layer_idx = layer_idx
+        self.layer_name = layer_name or f"layer_{layer_idx}" if layer_idx is not None else "final"
 
         # Setup device
         if device:
@@ -84,19 +90,15 @@ class SAETrainingPipeline:
         self.logger.info("✅ Embedding generator setup complete")
 
     def setup_sae_model(self):
-        """Setup the SAE model"""
-        self.sae_model = SAE(
-            input_size=self.embedding_dim,
-            hidden_size=self.hidden_dim
-        ).to(self.device)
-
-        self.logger.info(f"✅ SAE model setup complete: {self.embedding_dim} -> {self.hidden_dim}")
+        """
+        Setup the SAE model - to be overridden by subclasses
+        """
+        raise NotImplementedError("Subclasses must implement setup_sae_model()")
 
     def prepare_data(
         self,
         refseq_file: str,
         max_samples: int,
-        layer_idx: Optional[int] = None,
         train_split: float = 0.8,
         batch_size: int = 4,
         filter_by_type: str = "mRNA",
@@ -110,7 +112,6 @@ class SAETrainingPipeline:
         Args:
             refseq_file: Path to the RefSeq GenBank file
             max_samples: Number of samples to process
-            layer_idx: Layer to extract embeddings from
             train_split: Fraction of data for training
             batch_size: Batch size for dataloaders
             filter_by_type: Filter by molecule type (e.g., 'mRNA')
@@ -127,20 +128,19 @@ class SAETrainingPipeline:
             raise RuntimeError("Embedding generator not setup. Call setup_embedding_generator() first.")
 
         log_name = dataset_name or f"RefSeq_{Path(refseq_file).stem}"
-        self.logger.info(f"Generating embeddings from {log_name}: {refseq_file}")
+        layer_info = f" from {self.layer_name}" if self.layer_name else ""
+        self.logger.info(f"Generating embeddings from {log_name}{layer_info}: {refseq_file}")
         result = self.embedding_generator.generate_embeddings_from_refseq(
             refseq_file=refseq_file,
             max_samples=max_samples,
             filter_by_type=filter_by_type,
             use_cds=use_cds,
-            layer_idx=layer_idx,
+            layer_idx=self.layer_idx,
             dataset_name=dataset_name
         )
 
         embeddings = result["embeddings"]
         self.logger.info(f"Generated embeddings shape: {embeddings.shape}")
-
-        # Debug: inspect embeddings dimensions
 
         # Auto-detect embedding dimension if not set
         if self.embedding_dim is None:
@@ -220,7 +220,8 @@ class SAETrainingPipeline:
 
     def train(self, epochs: int = 100) -> dict[str, list[float]]:
         """
-        Train the SAE model using the existing SAETrainer
+        Train the SAE model - to be overridden by subclasses if needed
+        Default implementation uses the existing SAETrainer
 
         Args:
             epochs: Number of training epochs
@@ -243,13 +244,53 @@ class SAETrainingPipeline:
         return training_history
 
     def save_model(self, filename: str):
-        """Save the trained model"""
-        if self.trainer is None:
-            raise RuntimeError("Trainer not setup")
+        """Save the trained model with metadata"""
+        if self.sae_model is None:
+            raise RuntimeError("SAE model not setup")
 
         save_path = self.model_save_dir / filename
-        self.trainer.save_model(str(save_path))
+        
+        # Get model-specific save data
+        save_data = self._get_model_save_data()
+        
+        # Save model state and metadata
+        torch.save(save_data, str(save_path))
+        
+        # Also save layer information in a separate metadata file
+        metadata = self._get_metadata()
+        metadata_path = save_path.with_suffix('.metadata.json')
+        import json
+        with open(metadata_path, 'w') as f:
+            json.dump(metadata, f, indent=2)
+        
         self.logger.info(f"✅ Model saved to {save_path}")
+        self.logger.info(f"✅ Layer metadata saved to {metadata_path}")
+
+    def _get_model_save_data(self) -> Dict[str, Any]:
+        """
+        Get model-specific save data - to be overridden by subclasses
+        """
+        return {
+            'model_state_dict': self.sae_model.state_dict(),
+            'embedding_dim': self.embedding_dim,
+            'hidden_dim': self.hidden_dim,
+            'sparsity_weight': self.sparsity_weight,
+            'layer_idx': self.layer_idx,
+            'layer_name': self.layer_name
+        }
+
+    def _get_metadata(self) -> Dict[str, Any]:
+        """
+        Get metadata for saving - to be overridden by subclasses
+        """
+        return {
+            'layer_idx': self.layer_idx,
+            'layer_name': self.layer_name,
+            'embedding_dim': self.embedding_dim,
+            'hidden_dim': self.hidden_dim,
+            'sparsity_weight': self.sparsity_weight,
+            'model_type': 'base'
+        }
 
     def load_model(self, filename: str):
         """Load a trained model"""
@@ -259,25 +300,24 @@ class SAETrainingPipeline:
         if self.sae_model is None:
             self.setup_sae_model()
 
-        # Load using trainer
-        if self.trainer is None:
-            # Create a minimal trainer just for loading
-            from sae.training.utils import TrainingConfig
-            config = TrainingConfig(
-                input_size=self.embedding_dim,
-                hidden_size=self.hidden_dim,
-                sparsity_weight=self.sparsity_weight,
-                learning_rate=self.learning_rate,
-                device=str(self.device)
-            )
-            self.trainer = SAETrainer(
-                model=self.sae_model,
-                train_loader=None,  # Will be set later
-                config=config
-            )
-
-        self.trainer.load_model(str(load_path))
+        # Load model state
+        checkpoint = torch.load(str(load_path), map_location=self.device)
+        self.sae_model.load_state_dict(checkpoint['model_state_dict'])
+        
+        # Update parameters from checkpoint
+        self._update_from_checkpoint(checkpoint)
+        
         self.logger.info(f"✅ Model loaded from {load_path}")
+
+    def _update_from_checkpoint(self, checkpoint: Dict[str, Any]):
+        """
+        Update pipeline parameters from checkpoint - to be overridden by subclasses
+        """
+        self.embedding_dim = checkpoint.get('embedding_dim', self.embedding_dim)
+        self.hidden_dim = checkpoint.get('hidden_dim', self.hidden_dim)
+        self.sparsity_weight = checkpoint.get('sparsity_weight', self.sparsity_weight)
+        self.layer_idx = checkpoint.get('layer_idx', self.layer_idx)
+        self.layer_name = checkpoint.get('layer_name', self.layer_name)
 
     def plot_training_history(self, save_path: Optional[str] = None):
         """Plot training history using the trainer's logger"""
@@ -301,109 +341,38 @@ class SAETrainingPipeline:
 
         return activations.cpu().numpy()
 
+    def run_complete_pipeline(
+        self,
+        refseq_file: str,
+        max_samples: int = 1000,
+        embedding_dim: Optional[int] = None,
+        hidden_dim: int = 1000,
+        epochs: int = 50,
+        batch_size: int = 4,
+        filter_by_type: str = "mRNA",
+        use_cds: bool = True,
+        dataset_name: Optional[str] = None,
+        apply_sequence_pooling: bool = False,
+        **kwargs
+    ):
+        """
+        Run the complete pipeline: generate embeddings -> train SAE -> extract features
+        To be overridden by subclasses with specific pipeline logic
 
-def run_complete_pipeline(
-    refseq_file: str,
-    max_samples: int = 1000,
-    embedding_dim: Optional[int] = None,  # Will be auto-detected from embeddings
-    hidden_dim: int = 1000,  # Large for monosemantic features
-    epochs: int = 50,
-    batch_size: int = 4,
-    filter_by_type: str = "mRNA",
-    use_cds: bool = True,
-    dataset_name: Optional[str] = None,
-    apply_sequence_pooling: bool = False,
-    **kwargs
-) -> SAETrainingPipeline:
-    """
-    Run the complete pipeline: generate embeddings -> train SAE -> extract features
+        Args:
+            refseq_file: Path to the RefSeq GenBank file
+            max_samples: Number of samples to process
+            embedding_dim: Expected embedding dimension (auto-detected if None)
+            hidden_dim: Number of SAE features to learn
+            epochs: Number of training epochs
+            batch_size: Batch size for training
+            filter_by_type: Filter by molecule type (e.g., 'mRNA')
+            use_cds: Whether to use CDS features for sequence extraction
+            dataset_name: Optional name for logging purposes
+            apply_sequence_pooling: Whether to apply sequence-level pooling
+            **kwargs: Additional arguments for the pipeline
 
-    Args:
-        refseq_file: Path to the RefSeq GenBank file
-        max_samples: Number of samples to process
-        embedding_dim: Expected embedding dimension (auto-detected if None)
-        hidden_dim: Number of SAE features to learn (default: 1000 for monosemantic features)
-        epochs: Number of training epochs
-        batch_size: Batch size for training
-        filter_by_type: Filter by molecule type (e.g., 'mRNA')
-        use_cds: Whether to use CDS features for sequence extraction
-        dataset_name: Optional name for logging purposes
-        apply_sequence_pooling: Whether to apply sequence-level pooling (default: False)
-        **kwargs: Additional arguments for the pipeline
-
-    Returns:
-        Trained pipeline
-    """
-    print("🚀 Starting Complete SAE Training Pipeline")
-    print("=" * 60)
-
-    # Extract pipeline-specific kwargs
-    pipeline_kwargs = {}
-    for key in ["sparsity_weight", "learning_rate", "device", "cache_dir", "model_save_dir"]:
-        if key in kwargs:
-            pipeline_kwargs[key] = kwargs.pop(key)
-
-    # Initialize pipeline
-    pipeline = SAETrainingPipeline(
-        embedding_dim=embedding_dim,
-        hidden_dim=hidden_dim,
-        **pipeline_kwargs
-    )
-
-    # Setup components
-    print("1. Setting up embedding generator...")
-    pipeline.setup_embedding_generator(**kwargs)
-
-    # Prepare data first to get embedding dimension
-    print("2. Preparing training data...")
-    train_loader, val_loader = pipeline.prepare_data(
-        refseq_file=refseq_file,
-        max_samples=max_samples,
-        batch_size=batch_size,
-        filter_by_type=filter_by_type,
-        use_cds=use_cds,
-        dataset_name=dataset_name,
-        apply_sequence_pooling=apply_sequence_pooling
-    )
-
-
-
-    print("3. Setting up SAE model...")
-    pipeline.setup_sae_model()
-
-    # Setup trainer
-    print("4. Setting up trainer...")
-    pipeline.setup_trainer(train_loader, val_loader)
-
-    # Train
-    print("5. Training SAE model...")
-    history = pipeline.train(epochs=epochs)
-
-    # Plot results
-    print("6. Plotting training history...")
-    pipeline.plot_training_history("outputs/training_history.png")
-
-    print("✅ Pipeline completed successfully!")
-    return pipeline
-
-
-if __name__ == "__main__":
-    # Example usage
-    print("SAE Training Pipeline Example")
-    print("=" * 50)
-
-    try:
-        # Run complete pipeline with small dataset
-        pipeline = run_complete_pipeline(
-            refseq_file="../data/vertebrate_mammalian.1.rna.gbff",
-            max_samples=100,
-            hidden_dim=1000,  # Large for monosemantic features
-            epochs=10
-        )
-
-        print(f"✅ Pipeline completed! Model saved to {pipeline.model_save_dir}")
-
-    except Exception as e:
-        print(f"❌ Error: {e}")
-        print("Make sure all dependencies are installed:")
-        print("  poetry add helical torch numpy matplotlib seaborn tqdm")
+        Returns:
+            Trained pipeline
+        """
+        raise NotImplementedError("Subclasses must implement run_complete_pipeline()") 
