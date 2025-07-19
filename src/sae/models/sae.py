@@ -27,10 +27,16 @@ class TiedLinear(nn.Module):
             nn.init.uniform_(self.bias, -bound, bound)
 
     def forward(self, x):
+        # Ensure input is on the same device as the model parameters
+        if x.device != self.weight.device:
+            x = x.to(self.weight.device)
         return nn.functional.linear(x, self.weight, self.bias)
 
     def forward_transpose(self, x):
         """Forward pass using transposed weights (for decoder)"""
+        # Ensure input is on the same device as the model parameters
+        if x.device != self.weight.device:
+            x = x.to(self.weight.device)
         return nn.functional.linear(x, self.weight.t(), None)
 
 class SAE(nn.Module):

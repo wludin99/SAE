@@ -53,6 +53,66 @@ class SAETrainingPipeline(BaseSAETrainingPipeline):
             'model_type': 'regular'
         }
 
+    @classmethod
+    def load_from_checkpoint(cls, checkpoint_path: str) -> 'SAETrainingPipeline':
+        """
+        Load a trained SAE pipeline from a checkpoint directory.
+        
+        Args:
+            checkpoint_path: Path to the checkpoint directory containing model files
+            
+        Returns:
+            Loaded SAETrainingPipeline instance
+        """
+        checkpoint_path = Path(checkpoint_path)
+        
+        # Load metadata
+        metadata_path = checkpoint_path / "best_model.metadata.json"
+        if metadata_path.exists():
+            import json
+            with open(metadata_path, 'r') as f:
+                metadata = json.load(f)
+        else:
+            metadata = {}
+        
+        # Load model weights
+        model_path = checkpoint_path / "best_model.pth"
+        if not model_path.exists():
+            raise FileNotFoundError(f"Model file not found: {model_path}")
+        
+        # Create pipeline instance with metadata
+        # Handle device properly - if device is 'auto' or None, let the base pipeline handle it
+        device = metadata.get('device')
+        if device == 'auto':
+            device = None  # Let base pipeline auto-detect
+        
+        pipeline = cls(
+            embedding_dim=metadata.get('embedding_dim', 1024),
+            hidden_dim=metadata.get('hidden_dim', 1000),
+            layer_idx=metadata.get('layer_idx'),
+            layer_name=metadata.get('layer_name'),
+            sparsity_weight=metadata.get('sparsity_weight', 0.01),
+            device=device
+        )
+        
+        # Setup SAE model before loading weights
+        pipeline.setup_sae_model()
+        
+        # Load model weights
+        checkpoint = torch.load(model_path, map_location=pipeline.device)
+        if 'model_state_dict' in checkpoint:
+            pipeline.sae_model.load_state_dict(checkpoint['model_state_dict'])
+        else:
+            pipeline.sae_model.load_state_dict(checkpoint)
+        
+        # Set model to evaluation mode
+        pipeline.sae_model.eval()
+        
+        # Setup embedding generator
+        pipeline.setup_embedding_generator()
+        
+        return pipeline
+
     def run_complete_pipeline(
         self,
         refseq_file: str,
