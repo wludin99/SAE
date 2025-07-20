@@ -15,9 +15,6 @@ import pandas as pd
 import seaborn as sns
 from tqdm import tqdm
 
-# Add the src directory to the path
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
-
 from sae.pipeline import run_complete_batchtopk_pipeline, run_complete_pipeline
 
 
