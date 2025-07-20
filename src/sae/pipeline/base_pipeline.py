@@ -14,9 +14,8 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader, TensorDataset
 
-from sae.pipeline import EmbeddingGenerator
-from sae.training.trainer import SAETrainer
-from sae.training.utils import TrainingConfig
+from .embedding_generator import EmbeddingGenerator
+from sae.training import SAETrainer, TrainingConfig
 
 
 class BaseSAETrainingPipeline:
