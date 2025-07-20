@@ -8,15 +8,10 @@ This project uses Poetry for dependency management within a Conda environment.
 
 ### Prerequisites
 
-1. **Conda Environment**: Create and activate a conda environment
+**Conda Environment**: Create and activate a conda environment
 ```bash
-conda create -n helical python=3.11
+conda create -n helical python=3.11.8
 conda activate helical
-```
-
-2. **CUDA Toolkit** (optional, for GPU support):
-```bash
-conda install cuda-toolkit=12.4 -c nvidia
 ```
 
 ### Project Setup
@@ -29,8 +24,6 @@ cd SAE
 # Install dependencies with Poetry
 poetry install
 
-# Activate the Poetry shell
-poetry shell
 ```
 
 ### Development Setup
@@ -75,7 +68,6 @@ pipeline = run_complete_pipeline(
     max_samples=1000,
     hidden_dim=1000,
     epochs=50,
-    apply_sequence_pooling=False  # Use token-level embeddings
 )
 ```
 
@@ -109,28 +101,6 @@ history = pipeline.train(epochs=50)
 features = pipeline.extract_features(embeddings)
 ```
 
-### Token-Level vs Sequence-Level Embeddings
-
-The pipeline supports two modes:
-
-**Token-Level Embeddings** (default):
-```python
-# Preserves individual token information
-pipeline.prepare_data(
-    refseq_file="your_file.gbff",
-    apply_sequence_pooling=False  # 3D: (batch, seq_len, embed_dim)
-)
-```
-
-**Sequence-Level Embeddings**:
-```python
-# Pools tokens to sequence-level representations
-pipeline.prepare_data(
-    refseq_file="your_file.gbff",
-    apply_sequence_pooling=True  # 2D: (batch, embed_dim)
-)
-```
-
 ### Example Scripts
 
 ```bash
@@ -143,6 +113,14 @@ poetry run python examples/sequence_length_filter_example.py
 # Clean architecture example
 poetry run python examples/clean_architecture_example.py
 ```
+
+### Jupyter Notebooks
+
+Interactive notebooks are available in the `notebooks/` directory for exploratory analysis and experimentation:
+
+- **`sae_pipeline_interactive.ipynb`**: Interactive SAE training pipeline with visualization
+- **`correlation_analysis_notebook.ipynb`**: Correlation analysis between SAE features and biological properties
+- **`reconstruction_ablation.ipynb`**: Ablation studies for SAE reconstruction quality
 
 ## Development
 
@@ -182,11 +160,13 @@ poetry run ruff format .
 SAE/
 ├── src/sae/                    # Main package
 │   ├── data/                   # Data loading and parsing
+│   ├── metrics/                # Evaluation metrics
 │   ├── models/                 # SAE model implementation
 │   ├── pipeline/               # Training pipeline
 │   ├── preprocessing/          # Sequence preprocessing
 │   └── training/               # Training utilities
 ├── examples/                   # Usage examples
+├── notebooks/                  # Jupyter notebooks for analysis
 ├── tests/                      # Test files
 ├── outputs/                    # Generated outputs
 ├── pyproject.toml             # Poetry configuration
@@ -195,16 +175,6 @@ SAE/
 
 ## Dependencies
 
-- **Python**: 3.11+
+- **Python**: 3.11.8
 - **PyTorch**: 2.6.0
-- **Helical**: Latest from GitHub
-- **Biopython**: For RefSeq parsing
-- **CUDA Toolkit**: 12.4 (optional, for GPU support)
 
-## Environment Variables
-
-If using conda for CUDA toolkit, add these to your shell profile:
-```bash
-export CUDNN_PATH=$CONDA_PREFIX/lib/python3.11/site-packages/nvidia/cudnn
-export CPLUS_INCLUDE_PATH=$CONDA_PREFIX/lib/python3.11/site-packages/nvidia/nvtx/include
-```
