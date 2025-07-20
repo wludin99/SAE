@@ -5,13 +5,10 @@ This module provides a complete pipeline for training Sparse Autoencoders on
 embeddings generated from HelicalmRNA model.
 """
 
-import logging
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Any, Optional
 
-import numpy as np
 import torch
-from torch.utils.data import DataLoader, TensorDataset
 
 from sae.models.sae import SAE
 from sae.pipeline.base_pipeline import BaseSAETrainingPipeline
@@ -31,86 +28,86 @@ class SAETrainingPipeline(BaseSAETrainingPipeline):
 
         self.logger.info(f"✅ SAE model setup complete: {self.embedding_dim} -> {self.hidden_dim}")
 
-    def _get_model_save_data(self) -> Dict[str, Any]:
+    def _get_model_save_data(self) -> dict[str, Any]:
         """Get model-specific save data for regular SAE"""
         return {
-            'model_state_dict': self.sae_model.state_dict(),
-            'embedding_dim': self.embedding_dim,
-            'hidden_dim': self.hidden_dim,
-            'sparsity_weight': self.sparsity_weight,
-            'layer_idx': self.layer_idx,
-            'layer_name': self.layer_name
+            "model_state_dict": self.sae_model.state_dict(),
+            "embedding_dim": self.embedding_dim,
+            "hidden_dim": self.hidden_dim,
+            "sparsity_weight": self.sparsity_weight,
+            "layer_idx": self.layer_idx,
+            "layer_name": self.layer_name
         }
 
-    def _get_metadata(self) -> Dict[str, Any]:
+    def _get_metadata(self) -> dict[str, Any]:
         """Get metadata for regular SAE"""
         return {
-            'layer_idx': self.layer_idx,
-            'layer_name': self.layer_name,
-            'embedding_dim': self.embedding_dim,
-            'hidden_dim': self.hidden_dim,
-            'sparsity_weight': self.sparsity_weight,
-            'model_type': 'regular'
+            "layer_idx": self.layer_idx,
+            "layer_name": self.layer_name,
+            "embedding_dim": self.embedding_dim,
+            "hidden_dim": self.hidden_dim,
+            "sparsity_weight": self.sparsity_weight,
+            "model_type": "regular"
         }
 
     @classmethod
-    def load_from_checkpoint(cls, checkpoint_path: str) -> 'SAETrainingPipeline':
+    def load_from_checkpoint(cls, checkpoint_path: str) -> "SAETrainingPipeline":
         """
         Load a trained SAE pipeline from a checkpoint directory.
-        
+
         Args:
             checkpoint_path: Path to the checkpoint directory containing model files
-            
+
         Returns:
             Loaded SAETrainingPipeline instance
         """
         checkpoint_path = Path(checkpoint_path)
-        
+
         # Load metadata
         metadata_path = checkpoint_path / "best_model.metadata.json"
         if metadata_path.exists():
             import json
-            with open(metadata_path, 'r') as f:
+            with open(metadata_path) as f:
                 metadata = json.load(f)
         else:
             metadata = {}
-        
+
         # Load model weights
         model_path = checkpoint_path / "best_model.pth"
         if not model_path.exists():
             raise FileNotFoundError(f"Model file not found: {model_path}")
-        
+
         # Create pipeline instance with metadata
         # Handle device properly - if device is 'auto' or None, let the base pipeline handle it
-        device = metadata.get('device')
-        if device == 'auto':
+        device = metadata.get("device")
+        if device == "auto":
             device = None  # Let base pipeline auto-detect
-        
+
         pipeline = cls(
-            embedding_dim=metadata.get('embedding_dim', 1024),
-            hidden_dim=metadata.get('hidden_dim', 1000),
-            layer_idx=metadata.get('layer_idx'),
-            layer_name=metadata.get('layer_name'),
-            sparsity_weight=metadata.get('sparsity_weight', 0.01),
+            embedding_dim=metadata.get("embedding_dim", 1024),
+            hidden_dim=metadata.get("hidden_dim", 1000),
+            layer_idx=metadata.get("layer_idx"),
+            layer_name=metadata.get("layer_name"),
+            sparsity_weight=metadata.get("sparsity_weight", 0.01),
             device=device
         )
-        
+
         # Setup SAE model before loading weights
         pipeline.setup_sae_model()
-        
+
         # Load model weights
         checkpoint = torch.load(model_path, map_location=pipeline.device)
-        if 'model_state_dict' in checkpoint:
-            pipeline.sae_model.load_state_dict(checkpoint['model_state_dict'])
+        if "model_state_dict" in checkpoint:
+            pipeline.sae_model.load_state_dict(checkpoint["model_state_dict"])
         else:
             pipeline.sae_model.load_state_dict(checkpoint)
-        
+
         # Set model to evaluation mode
         pipeline.sae_model.eval()
-        
+
         # Setup embedding generator
         pipeline.setup_embedding_generator()
-        
+
         return pipeline
 
     def run_complete_pipeline(
@@ -182,16 +179,16 @@ class SAETrainingPipeline(BaseSAETrainingPipeline):
         # Train
         print("5. Training SAE model...")
         history = self.train(epochs=epochs)
-        
+
         # Convert training history to the format expected by ablation study
         # history is a list of dictionaries, convert to dict with lists
         if history and isinstance(history, list):
             converted_history = {
-                'train_loss': [epoch['total_loss'] for epoch in history],
-                'val_loss': [epoch.get('val_total_loss', epoch.get('total_loss', 0)) for epoch in history],
-                'val_reconstruction_loss': [epoch.get('val_reconstruction_loss', 0) for epoch in history],
-                'val_l0_sparsity': [epoch.get('val_l0_sparsity', 0) for epoch in history],
-                'val_sparsity_percentage': [epoch.get('val_sparsity_percentage', 0) for epoch in history]
+                "train_loss": [epoch["total_loss"] for epoch in history],
+                "val_loss": [epoch.get("val_total_loss", epoch.get("total_loss", 0)) for epoch in history],
+                "val_reconstruction_loss": [epoch.get("val_reconstruction_loss", 0) for epoch in history],
+                "val_l0_sparsity": [epoch.get("val_l0_sparsity", 0) for epoch in history],
+                "val_sparsity_percentage": [epoch.get("val_sparsity_percentage", 0) for epoch in history]
             }
             self._last_training_history = converted_history
         else:

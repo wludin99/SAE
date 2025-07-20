@@ -142,7 +142,7 @@ class SAETrainer:
             "sparsity_loss": [],
             "total_loss": []
         }
-        
+
         # Track L0 sparsity (number of non-zero activations)
         l0_counts = []
         sparsity_percentages = []
@@ -159,7 +159,7 @@ class SAETrainer:
                 val_losses.append(loss.item())
                 for key, value in loss_dict.items():
                     val_metrics[key].append(value)
-                
+
                 # Calculate L0 sparsity (number of non-zero features per hidden dimension)
                 # encoded shape: (batch_size, hidden_dim) or (batch_size, seq_len, hidden_dim)
                 if len(encoded.shape) == 3:
@@ -168,7 +168,7 @@ class SAETrainer:
                     # Count non-zero features per token position
                     non_zero_per_token = (encoded != 0).sum(dim=2).float()  # (batch_size, seq_len)
                     # Average across all tokens and samples
-                    avg_non_zero_per_token = non_zero_per_token.mean() 
+                    avg_non_zero_per_token = non_zero_per_token.mean()
                     sparsity_percentage = avg_non_zero_per_token.cpu().numpy()
                 else:
                     # Handle 2D case: (batch_size, hidden_dim)
@@ -177,7 +177,7 @@ class SAETrainer:
                     avg_non_zero_per_token = (encoded != 0).sum(dim=1).float().mean()  # Average across samples
                     # Calculate sparsity percentage
                     sparsity_percentage = avg_non_zero_per_token.cpu().numpy()
-                
+
                 l0_counts.extend([avg_non_zero_per_token.cpu().numpy()])
                 sparsity_percentages.extend([sparsity_percentage])
 

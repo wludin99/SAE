@@ -8,7 +8,7 @@ HelicalmRNA model. It provides utilities for batch processing and caching embedd
 import logging
 import pickle
 from pathlib import Path
-from typing import Any, Optional, Dict, List
+from typing import Any, Optional
 
 import numpy as np
 import torch
@@ -304,7 +304,7 @@ class EmbeddingGenerator:
             cache_key = f"refseq_{Path(refseq_file).stem}_{filter_by_type}_{max_samples or 'all'}_all_layers"
             cached_result = self._load_from_cache(cache_key)
             if cached_result is not None:
-                self.logger.info(f"✅ Loaded all layer embeddings from cache")
+                self.logger.info("✅ Loaded all layer embeddings from cache")
                 return cached_result
 
         # Use dataset_name for logging if provided
@@ -357,7 +357,7 @@ class EmbeddingGenerator:
         self.logger.info(f"✅ Generated embeddings for {len(numpy_embeddings)} layers")
         return result
 
-    def get_available_layers(self) -> List[str]:
+    def get_available_layers(self) -> list[str]:
         """
         Get list of available layers for embedding extraction.
 
@@ -399,11 +399,11 @@ if __name__ == "__main__":
     # Test with a small dataset
     try:
         generator = EmbeddingGenerator()
-        
+
         # Get available layers
         available_layers = generator.get_available_layers()
         print(f"Available layers: {available_layers}")
-        
+
         # Example: Generate embeddings from a specific layer
         # result = generator.generate_layer_embeddings_from_refseq(
         #     refseq_file="path/to/your/refseq_file.gb",
@@ -411,7 +411,7 @@ if __name__ == "__main__":
         #     max_samples=10,
         #     dataset_name="test_dataset"
         # )
-        
+
         # Example: Generate embeddings from all layers
         # result = generator.generate_all_layer_embeddings_from_refseq(
         #     refseq_file="path/to/your/refseq_file.gb",
@@ -424,4 +424,3 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"❌ Error: {e}")
         print("Make sure Helical is installed: poetry add helical")
- 

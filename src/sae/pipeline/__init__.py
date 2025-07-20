@@ -2,10 +2,13 @@
 Pipeline module for SAE training on HelicalmRNA embeddings
 """
 
-from .embedding_generator import EmbeddingGenerator
 from .base_pipeline import BaseSAETrainingPipeline
+from .batchtopk_pipeline import (
+    BatchTopKSAETrainingPipeline,
+    run_complete_batchtopk_pipeline,
+)
+from .embedding_generator import EmbeddingGenerator
 from .sae_pipeline import SAETrainingPipeline, run_complete_pipeline
-from .batchtopk_pipeline import BatchTopKSAETrainingPipeline, run_complete_batchtopk_pipeline
 
 __all__ = [
     "EmbeddingGenerator",

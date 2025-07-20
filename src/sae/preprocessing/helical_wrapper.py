@@ -6,7 +6,7 @@ All preprocessing should be handled by RefSeqPreprocessor before passing sequenc
 """
 
 import logging
-from typing import Any, Optional, Dict, List
+from typing import Any, Optional
 
 import torch
 from helical.models.helix_mrna import HelixmRNA, HelixmRNAConfig
@@ -119,29 +119,29 @@ class HelicalWrapper(SequenceModelWrapper):
             return hook
 
         # Check if model has a 'model' attribute (the actual underlying model)
-        if hasattr(self.model, 'model'):
+        if hasattr(self.model, "model"):
             actual_model = self.model.model
-            
+
             # Hook into the actual model's layers
-            if hasattr(actual_model, 'embeddings'):
+            if hasattr(actual_model, "embeddings"):
                 self._hooks.append(actual_model.embeddings.register_forward_hook(
                     create_hook("initial")
                 ))
-            
-            if hasattr(actual_model, 'layers'):
+
+            if hasattr(actual_model, "layers"):
                 mlp_layers = [1, 3, 5]  # MLP layer indices
                 layer_name_mapping = {1: "after_mlp_1", 3: "after_mlp_2", 5: "after_mlp_3"}
-                
+
                 for i in mlp_layers:
                     if i < len(actual_model.layers):
                         layer = actual_model.layers[i]
-                        if hasattr(layer, 'feed_forward'):
+                        if hasattr(layer, "feed_forward"):
                             layer_name = layer_name_mapping.get(i, f"mlp_{i}")
                             self._hooks.append(layer.feed_forward.register_forward_hook(
                                 create_hook(layer_name)
                             ))
-            
-            if hasattr(actual_model, 'norm_f'):
+
+            if hasattr(actual_model, "norm_f"):
                 self._hooks.append(actual_model.norm_f.register_forward_hook(
                     create_hook("final")
                 ))
@@ -170,11 +170,11 @@ class HelicalWrapper(SequenceModelWrapper):
 
         self.initialize()
         self._setup_layer_hooks()
-        
+
         try:
             # Process sequences to trigger hooks
             processed_data = self._preprocess_sequences(sequences)
-            
+
             # Use get_embeddings which we know works
             with torch.no_grad():
                 _ = self.model.get_embeddings(processed_data)
@@ -182,11 +182,11 @@ class HelicalWrapper(SequenceModelWrapper):
             # Get the requested layer output
             if layer_name in self._layer_outputs:
                 embeddings = self._layer_outputs[layer_name]
-                
+
                 # Handle tuple outputs (some layers return tuples)
                 if isinstance(embeddings, tuple):
                     embeddings = embeddings[0]  # Use first element
-                
+
                 if isinstance(embeddings, torch.Tensor):
                     embeddings = embeddings.to(self.config.device)
                     return embeddings
@@ -198,7 +198,7 @@ class HelicalWrapper(SequenceModelWrapper):
         finally:
             self._clear_hooks()
 
-    def get_all_layer_embeddings(self, sequences: list[str]) -> Dict[str, torch.Tensor]:
+    def get_all_layer_embeddings(self, sequences: list[str]) -> dict[str, torch.Tensor]:
         """
         Get embeddings from all available layers in one forward pass.
 
@@ -214,7 +214,7 @@ class HelicalWrapper(SequenceModelWrapper):
         try:
             # Process sequences to trigger hooks
             processed_data = self._preprocess_sequences(sequences)
-            
+
             # Forward pass to capture all layer outputs
             with torch.no_grad():
                 _ = self.model.get_embeddings(processed_data)
@@ -225,11 +225,11 @@ class HelicalWrapper(SequenceModelWrapper):
                 # Skip mlp_7 since we don't care about it
                 if layer_name == "mlp_7":
                     continue
-                    
+
                 # Handle tuple outputs
                 if isinstance(embeddings, tuple):
                     embeddings = embeddings[0]  # Use first element
-                
+
                 if isinstance(embeddings, torch.Tensor):
                     layer_embeddings[layer_name] = embeddings.to(self.config.device)
 
@@ -285,4 +285,3 @@ def create_helical_wrapper(
     )
 
     return HelicalWrapper(config)
- 

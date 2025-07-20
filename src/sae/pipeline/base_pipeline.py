@@ -8,7 +8,7 @@ from HelicalmRNA model.
 
 import logging
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Any, Optional
 
 import numpy as np
 import torch
@@ -249,47 +249,47 @@ class BaseSAETrainingPipeline:
             raise RuntimeError("SAE model not setup")
 
         save_path = self.model_save_dir / filename
-        
+
         # Get model-specific save data
         save_data = self._get_model_save_data()
-        
+
         # Save model state and metadata
         torch.save(save_data, str(save_path))
-        
+
         # Also save layer information in a separate metadata file
         metadata = self._get_metadata()
-        metadata_path = save_path.with_suffix('.metadata.json')
+        metadata_path = save_path.with_suffix(".metadata.json")
         import json
-        with open(metadata_path, 'w') as f:
+        with open(metadata_path, "w") as f:
             json.dump(metadata, f, indent=2)
-        
+
         self.logger.info(f"✅ Model saved to {save_path}")
         self.logger.info(f"✅ Layer metadata saved to {metadata_path}")
 
-    def _get_model_save_data(self) -> Dict[str, Any]:
+    def _get_model_save_data(self) -> dict[str, Any]:
         """
         Get model-specific save data - to be overridden by subclasses
         """
         return {
-            'model_state_dict': self.sae_model.state_dict(),
-            'embedding_dim': self.embedding_dim,
-            'hidden_dim': self.hidden_dim,
-            'sparsity_weight': self.sparsity_weight,
-            'layer_idx': self.layer_idx,
-            'layer_name': self.layer_name
+            "model_state_dict": self.sae_model.state_dict(),
+            "embedding_dim": self.embedding_dim,
+            "hidden_dim": self.hidden_dim,
+            "sparsity_weight": self.sparsity_weight,
+            "layer_idx": self.layer_idx,
+            "layer_name": self.layer_name
         }
 
-    def _get_metadata(self) -> Dict[str, Any]:
+    def _get_metadata(self) -> dict[str, Any]:
         """
         Get metadata for saving - to be overridden by subclasses
         """
         return {
-            'layer_idx': self.layer_idx,
-            'layer_name': self.layer_name,
-            'embedding_dim': self.embedding_dim,
-            'hidden_dim': self.hidden_dim,
-            'sparsity_weight': self.sparsity_weight,
-            'model_type': 'base'
+            "layer_idx": self.layer_idx,
+            "layer_name": self.layer_name,
+            "embedding_dim": self.embedding_dim,
+            "hidden_dim": self.hidden_dim,
+            "sparsity_weight": self.sparsity_weight,
+            "model_type": "base"
         }
 
     def load_model(self, filename: str):
@@ -302,22 +302,22 @@ class BaseSAETrainingPipeline:
 
         # Load model state
         checkpoint = torch.load(str(load_path), map_location=self.device)
-        self.sae_model.load_state_dict(checkpoint['model_state_dict'])
-        
+        self.sae_model.load_state_dict(checkpoint["model_state_dict"])
+
         # Update parameters from checkpoint
         self._update_from_checkpoint(checkpoint)
-        
+
         self.logger.info(f"✅ Model loaded from {load_path}")
 
-    def _update_from_checkpoint(self, checkpoint: Dict[str, Any]):
+    def _update_from_checkpoint(self, checkpoint: dict[str, Any]):
         """
         Update pipeline parameters from checkpoint - to be overridden by subclasses
         """
-        self.embedding_dim = checkpoint.get('embedding_dim', self.embedding_dim)
-        self.hidden_dim = checkpoint.get('hidden_dim', self.hidden_dim)
-        self.sparsity_weight = checkpoint.get('sparsity_weight', self.sparsity_weight)
-        self.layer_idx = checkpoint.get('layer_idx', self.layer_idx)
-        self.layer_name = checkpoint.get('layer_name', self.layer_name)
+        self.embedding_dim = checkpoint.get("embedding_dim", self.embedding_dim)
+        self.hidden_dim = checkpoint.get("hidden_dim", self.hidden_dim)
+        self.sparsity_weight = checkpoint.get("sparsity_weight", self.sparsity_weight)
+        self.layer_idx = checkpoint.get("layer_idx", self.layer_idx)
+        self.layer_name = checkpoint.get("layer_name", self.layer_name)
 
     def plot_training_history(self, save_path: Optional[str] = None):
         """Plot training history using the trainer's logger"""
@@ -375,4 +375,4 @@ class BaseSAETrainingPipeline:
         Returns:
             Trained pipeline
         """
-        raise NotImplementedError("Subclasses must implement run_complete_pipeline()") 
+        raise NotImplementedError("Subclasses must implement run_complete_pipeline()")
